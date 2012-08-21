@@ -140,7 +140,10 @@ class Path(object):
             bits = ('', )
         else:
             bits = (os.getcwd(), self)
-        return self.__class__(*bits, keep_trailing_slash=self._kts)
+        # This garbage is cause keyword after *args is syntax error in Python 2.5
+        lame = self.__class__('', keep_trailing_slash=self._kts)
+        lame.__init_path__(*bits)
+        return lame
 
     @property
     def basename(self):
