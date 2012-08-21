@@ -1,6 +1,0 @@
-# Additional pip installable prerequisites needed
-# to run unittests.
-#
-#     pip install -U -r test_requirements.pip
-
-pep8

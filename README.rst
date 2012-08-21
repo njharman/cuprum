@@ -34,27 +34,28 @@ offs" that grow into complex messes.
   - As much support for scripting windows as is reasonably possible
 
 
-Requirements
-------------
- - six_ Python 2/3 compatibility library
-
-::
-
-  pip install -U -r requirements.pip
-
-
 Testing
 -------
-The author uses nose_ to run unittests.  Additional unittests prerequisites:
-
+Additional unittests prerequisites:
  - pep8_
  - unittest2_ (only Python < 2.7)
 
+The author uses nose_ to run unittests. ::
+
+  pip install -U -r requirements.pip --use-mirrors
+  pip install -U pep8 --use-mirrors
+  nosetests
+
+
+Installing
+----------
+Prequisites:
+ - six_ Python 2/3 compatibility library.
+
 ::
 
   pip install -U -r requirements.pip
-  pip install -U -r test_requirements.pip
-  nosetests
+  python setup.py install
 
 
 Build Status
