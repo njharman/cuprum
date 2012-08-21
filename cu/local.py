@@ -118,6 +118,8 @@ class LocalSystem(object):
         '''Context manager that creates a named temporary file, which is
         removed when the context exits.
 
+        Unteted and probably does not work in Python 2.5
+
         :yields: file handle object with attribut 'name', a :class:`Path` object
         '''
         # Explicitly named kwargs cause order changes in Python 3.x

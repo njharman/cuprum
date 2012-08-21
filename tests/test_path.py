@@ -14,10 +14,12 @@ import six
 from cu import Path
 
 
-# NOTE: all tests assume *unix OS.
+# NOTE: All tests currently assume a *unix environment.
 
 
 def tmpfile(delete=False):
+    # Python 2.5 NamedTemporaryFile does not support delete arg
+    # TODO: Python 2.5 compatible verson
     return tempfile.NamedTemporaryFile(delete=delete, prefix='cuprum_test_')
 
 
@@ -214,6 +216,7 @@ class PathTestCase(unittest.TestCase):
         Path('/tmp').size
         Path('/etc/passwd').size
 
+    @unittest.skipIf(sys.version.startswith('2.5'), 'Unsupported for Python 2.5 (see tmpfile)')
     def test_group_owner(self):
         self.assertEqual('root', Path('/tmp').owner)
         self.assertEqual('root', Path('/etc/passwd').group)
@@ -231,6 +234,7 @@ class PathTestCase(unittest.TestCase):
         finally:
             os.remove(fh.name)
 
+    @unittest.skipIf(sys.version.startswith('2.5'), 'Unsupported for Python 2.5 (see tmpfile)')
     def test_mode(self):
         #self.assertEqual('root', Path('/etc/passwd').mode)
         #self.assertEqual('root', Path('/tmp').mode)
@@ -338,6 +342,7 @@ class PathTestCase(unittest.TestCase):
         Path('/tmp').list()
         self.assertRaises(OSError, Path('/doesnot_exist').list)
 
+    @unittest.skipIf(sys.version.startswith('2.5'), 'Unsupported for Python 2.5 (see tmpfile)')
     def test_links(self):
         for method in ('link', 'hardlink', 'symlink'):
             fh = tmpfile()
@@ -381,6 +386,7 @@ class PathTestCase(unittest.TestCase):
         finally:
             os.remove(name)
 
+    @unittest.skipIf(sys.version.startswith('2.5'), 'Unsupported for Python 2.5 (see tmpfile)')
     def test_touch(self):
         fh = tmpfile()
         try:

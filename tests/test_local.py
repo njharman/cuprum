@@ -4,6 +4,7 @@ try:
 except ImportError:
     import unittest
 import os
+import sys
 
 from cu import local, FG, BG, ERROUT
 from cu import CommandNotFound, ProcessExecutionError, ProcessTimedOut
@@ -153,6 +154,7 @@ class LocalMachineTest(unittest.TestCase):
                 self.assertEqual(f.read(), 'hello world')
         self.assertFalse(dir.exists)
 
+    @unittest.skipIf(sys.version.startswith('2.5'), 'Unsupported for Python 2.5')
     def test_tempfile(self):
         # text mode otherwise Py3 bitches about string not being bytes
         with local.tempfile('w+t') as fh:
