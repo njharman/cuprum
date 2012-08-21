@@ -30,13 +30,13 @@ class LocalMachineTest(unittest.TestCase):
         self.assertRaises(OSError, local.cwd.chdir, '../non_exist1N9')
 
     def test_path(self):
-        self.assertFalse((local.cwd / '../non_exist1N9').exists())
-        self.assertTrue((local.cwd / '..' / 'cu').isdir())
+        self.assertFalse((local.cwd / '../non_exist1N9').exists)
+        self.assertTrue((local.cwd / '..' / 'cu').isdir)
         # traversal
         found = False
         for fn in local.cwd / '..' / 'cu':
             if fn.basename == '__init__.py':
-                self.assertTrue(fn.isfile())
+                self.assertTrue(fn.isfile)
                 found = True
         self.assertTrue(found)
         # glob'ing
@@ -142,19 +142,9 @@ class LocalMachineTest(unittest.TestCase):
 
     def test_tempdir(self):
         with local.tempdir() as dir:
-            self.assertTrue(dir.isdir())
+            self.assertTrue(dir.isdir)
             with open(str(dir / 'test.txt'), 'w') as f:
                 f.write('hello world')
             with open(str(dir / 'test.txt'), 'r') as f:
                 self.assertEqual(f.read(), 'hello world')
-        self.assertFalse(dir.exists())
-
-    def test_read_write(self):
-        with local.tempdir() as tmp:
-            data = 'hello world'
-            (tmp / 'foo.txt').write(data)
-            self.assertEqual((tmp / 'foo.txt').read(), data)
-
-
-if __name__ == '__main__':
-    unittest.main()
+        self.assertFalse(dir.exists)

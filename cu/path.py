@@ -17,6 +17,12 @@ from contextlib import contextmanager
 
 import logging
 log = logging.getLogger('cu.path')
+# log.info operations that change filesystem, otherwise quiet
+
+# TODO:
+# path.realpath
+# path.relpath
+# path.samefile
 
 
 class Path(object):
@@ -27,24 +33,30 @@ class Path(object):
       - Have applicaple stuff from os.path as methods.
       - Are immutable (not enforced).
       - Trailing slash are preserved, multiple are collapsed.
+      - Can chain
 
     ::
 
       root = Path('/')
       log = Path('/', 'var', 'log')
 
-    os.path.normpath (empty paths and trailing slashes are preserved) and
-    os.path.normcase are applied to path when instantiated.
-
     Class attributes
       - sep: os.path.sep
+      - unicode: os.path.supports_unicode_filenames
 
     '''
     sep = os.path.sep
+    unicode = os.path.supports_unicode_filenames
+
+    @classmethod
+    def commonprefix(cls, paths):
+        '''os.path.commonprefix classmethod'''
+        return os.path.commonprefix(str(p) for p in paths)
 
     def __init__(self, path, *bits, **kwargs):
         '''
         :param keep_trailing_slash: [True] if True any trailing slashes will be preserved
+        :param expand: [True] if True expand() called.
         '''
         self._kts = kwargs.get('keep_trailing_slash', True)
         self.__init_path__(path, *bits)
@@ -117,18 +129,94 @@ class Path(object):
             return result
 
     @property
+    def abs(self):
+        '''Absolute version of this path, using cwd if necessary.
+        '' is returned as '' not cwd.
+        :return: new Path()
+        '''
+        if self.startswith(self.sep):
+            bits = (self, )
+        elif self == '':
+            bits = ('', )
+        else:
+            bits = (os.getcwd(), self)
+        return self.__class__(*bits, keep_trailing_slash=self._kts)
+
+    @property
     def basename(self):
-        '''The basename component of this path.
+        '''The basename component (everything after final slash) of this path.
+        If path ends in slash basename is '', different than unix basename.
         :return: str
         '''
         return os.path.basename(self._path)
 
     @property
     def dirname(self):
-        '''The dirname component of this path.
-        :return: new Path(dest)
+        '''The dirname component (everything before final slash) of this path.
+        If path ends in slash dirname == path.
+        :return: new Path()
         '''
         return self.__class__(os.path.dirname(self._path), keep_trailing_slash=self._kts)
+
+    @property
+    def exists(self):
+        '''Does this path exists and is not a broken link.'''
+        return os.path.exists(self._path)
+
+    @property
+    def isabs(self):
+        '''Is this path is absolute.'''
+        return os.path.isabs(self._path)
+
+    @property
+    def isabsolute(self):
+        '''Is this path is absolute.'''
+        return os.path.isabs(self._path)
+
+    @property
+    def isrelative(self):
+        '''Is this path is relative.'''
+        return not os.path.isabs(self._path)
+
+    @property
+    def isdir(self):
+        '''Is this path is a directory.'''
+        return os.path.isdir(self._path)
+
+    @property
+    def isfile(self):
+        '''Is this path is a regular file.'''
+        return os.path.isfile(self._path)
+
+    @property
+    def islink(self):
+        '''Is this path is a symbolic link.'''
+        return os.path.islink(self._path)
+
+    @property
+    def ismount(self):
+        '''Is this path is a mount point.'''
+        return os.path.ismount(self._path)
+
+    @property
+    def atime(self):
+        '''Access time of leaf component of this path.'''
+        return os.path.getatime(self._path)
+
+    @property
+    def mtime(self):
+        '''Modified time of leaf component of this path.'''
+        return os.path.getmtime(self._path)
+
+    @property
+    def ctime(self):
+        '''Change/creattion(win32) time of leaf component of this path.'''
+        return os.path.getctime(self._path)
+
+    @property
+    def size(self):
+        '''Size in bytes of leaf component of this path.'''
+        return os.path.getsize(self._path)
 
     @property
     def owner(self):
@@ -138,6 +226,10 @@ class Path(object):
 
     @owner.setter
     def owner(self, owner):
+        '''Set owner and optional group with owner:group syntax.'''
+        if ':' in owner:
+            owner, self.group = owner.split(':', 1)
+        log.info('Owner %s set on %s' % (owner, self._path))
         self.chown(owner)
 
     @property
@@ -150,30 +242,81 @@ class Path(object):
     def group(self, group):
         self.chown(group=group)
 
-    def isdir(self):
-        '''``True`` if this path is a directory, ``False`` otherwise.'''
-        return os.path.isdir(self._path)
+    @property
+    def mode(self):
+        '''The mode of leaf component of this path.'''
+        stat = self.stat()
+        return stat.st_mode # TODO: translate this into something that makes sense
 
-    def isfile(self):
-        '''``True`` if this path is a regular file, ``False`` otherwise.'''
-        return os.path.isfile(self._path)
+    @mode.setter
+    def mode(self, flags):
+        '''Set file mode of leaf component of this path.'''
+        self.chmod(flags)
 
-    def exists(self):
-        '''``True`` if this path exists, ``False`` otherwise.'''
-        return os.path.exists(self._path)
+    def stat(self, followlinks=True):
+        '''Same as os.stat(self).
+        :param followlinks: [True] if False use os.lstat
+        '''
+        if followlinks:
+            return os.stat(self._path)
+        else:
+            return os.lstat(self._path)
 
-    def stat(self):
-        '''Same as os.stat(self)'''
-        return os.stat(self._path)
+    def statfs(self):
+        '''Same as os.statvfs(self)'''
+        return os.statvfs(self._path)
+
+    statvfs = statfs
 
     def split(self, sep=None):
-        '''Split on self.sep by default.'''
+        '''Split on self.sep by default.
+        Include leading os.sep. Remove any final ''.
+        For os.path.split behavior see split_path
+        '''
         if sep is None:
             sep = self.sep
-        return self._pathize(self._path.split(sep))
+        bits = self._path.split(sep)
+        if bits[0] == '':
+            bits[0] = os.sep
+        return self._pathize(bits)
+
+    def split_drive(self):
+        '''os.path.splitdrive on this path.
+        :return: (drive, tail)
+        '''
+        return self._pathize(os.path.splitdrive(self._path))
+
+    splitdrive = split_drive  # what it is called in os.path module
+
+    def split_extension(self):
+        '''os.path.splitext on this path.
+        :return: (root, extension)
+        '''
+        return self._pathize(os.path.splitdrive(self._path))
+
+    splitext = split_extension  # what it is called in os.path module
+    split_ext = split_extension
+
+    def split_path(self):
+        '''os.path.split on this path.
+        :return: (root, tail)
+        '''
+        return self._pathize(os.path.split(self._path))
+
+    splitpath = split_path  # for api consistancy
+
+    def split_unc(self):
+        '''os.path.splitdrive on this path.
+        :return: (unc, rest)
+        '''
+        return self._pathize(os.path.splitunc(self._path))
+
+    splitunc = split_unc  # what it is called in os.path module
 
     def join(self, *bits):
-        '''Returns new Path, self joined with any number of path bits.
+        '''join self with any number of path bits.
+        For os.path.join behavior see join_path.
+        :return: new Path()
         '''
         # os.path.join has suprising qualities;
         # e.g. join("/foo/bar", "/wtf") returns "/wtf". Seriously WTFwaffles!?
@@ -191,9 +334,24 @@ class Path(object):
         proper_bits = head + [str(b.lstrip(self.sep)) for b in tail]
         return self.__class__(os.path.join(*proper_bits), keep_trailing_slash=self._kts)
 
+    def join_path(self, *bits):
+        '''os.path.join
+        :return: new Path()
+        '''
+        return self.__class__(os.path.join(*bits), keep_trailing_slash=self._kts)
+
+    joinpath = join_path  # api consistancy
+
+    def expand(self):
+        '''Expands any environment variables and home shortcuts in path
+        (like ``os.path.expanduser`` after ``os.path.expandvars``)
+        :returns: expanded string
+        '''
+        return self.__class__(os.path.expanduser(os.path.expandvars(self._path)), keep_trailing_slash=self._kts)
+
     def glob(self, pattern):
-        '''Returns a (possibly empty) list of Paths that matched the
-        glob-pattern under this path.
+        '''Expand pattern as glob.glob rooted at this path.
+        :return: (possibly empty) list of Path()s matching glob
         '''
         return [self.__class__(path, keep_trailing_slash=self._kts) for path in glob.glob(str(self / pattern))]
 
@@ -203,39 +361,94 @@ class Path(object):
         '''
         return self.join('../' * count)
 
-    def walk(self, filter=lambda p: True):
-        '''Traverse all (recursive) sub-elements under this directory, that
+    def walk(self, topdown=True, onerror=None, followlinks=False):
+        '''os.walk, a generator.
+        :return: (dirpath, dirnames, filenames)
+        '''
+        for x in os.walk(self._path, topdown, onerror, followlinks):
+            yield x
+
+    def walk_iter(self, filter=lambda p: True):
+        '''Yield all (recursive) sub-elements under this directory, that
         match the given filter.  By default, the filter accepts everything; you
         can provide a custom filter function that takes a path as an argument
         and returns a boolean.
         .'''
+        # TODO: non-recursive implementation (python's stack not infinite)
         for p in self.list():
             if filter(p):
                 yield p
-                if p.isdir():
+                if p.isdir:
                     for p2 in p.walk():
                         yield p2
 
+    walkiter = walk_iter  # for api consistancy
+
+    def walk_path(self, visit, arg=None):
+        '''os.path.walk
+        Deprecated in py 3
+        :param visit: func(arg, dirname, names)
+        :param arg: [None] passed to visit
+        :return: self (for chaining)
+        '''
+        os.path.walk(self._path, visit, arg)
+        return self
+
+    walkpath = walk_path  # for api consistancy
+
+    def readlink(self):
+        '''Path this symbolic link points to.
+        Error if self is not a symbolic link
+        :return: relative or absolute Path()
+        '''
+        return os.readlink(self._path)
+
+    def link(self, link, force=False, symbolic=False):
+        '''Create link to this path.
+        :param force: [False] remove any existing file, directory or link.
+        :param symbolic: [False] if True hard link, else symbolic
+        :return: Path(link)
+        '''
+        if force:
+            Path(link).delete()
+        if symbolic:
+            log.info('Symlink to %s' % (self._path, ))
+            os.symlink(self._path, str(link))
+        else:
+            log.info('Hardlink to %s' % (self._path, ))
+            os.link(self._path, str(link))
+        return self.__class__(link, keep_trailing_slash=self._kts)
+
+    def hardlink(self, link, force=False):
+        '''Create hard link to this path.
+        No error if link exists
+        :param force: [False] remove any existing file, directory or link.
+        :return: Path(link)
+        '''
+        return self.link(link, force, symbolic=False)
+
+    def symlink(self, link, force=False):
+        '''Create symbolic link to this path.
+        :param force: [False] remove any existing file, directory or link.
+        :return: Path(link)
+        '''
+        return self.link(link, force, symbolic=True)
+
     def list(self):
-        '''Returns list of Paths or single Path if file.'''
-        if self.isfile():
+        '''Listing of entries in this path.
+        If this path represents file only it returnedk.
+        :return: list of Path()s'''
+        if self.isfile:
             return [self, ]
         return [self / file for file in os.listdir(self._path)]
 
     def chdir(self):
-        '''Changes current working directory to self.'''
-        log.debug('Chdir to %s', self._path)
-        os.chdir(self._path)
-
-    def move(self, dest, force=False):
-        '''Moves this path to a different location.
-        :return: new Path(dest)
+        '''Changes current working directory to this path.
+        :return: self (for chaining)
         '''
-        dest = self.__class__(dest, keep_trailing_slash=self._kts)
-        if force:
-            dest.delete()
-        shutil.move(self._path, dest._path)
-        return dest
+        log.info('Chdir to %s' % (self._path, ))
+        os.chdir(self._path)
+        return self
 
     def copy(self, dest, force=False):
         '''Copies this path (recursively, if a directory) to the destination
@@ -245,83 +458,157 @@ class Path(object):
         dest = self.__class__(dest, keep_trailing_slash=self._kts)
         if force:
             dest.delete()
-        if self.isdir():
+        log.info('Copy to %s' % (self._path, ))
+        if self.isdir:
             shutil.copytree(self._path, dest)
         else:
             shutil.copy2(self._path, dest)
         return dest
 
+    def move(self, dest, force=False):
+        '''Moves this path to a different location.
+        :param force: delete any existing dest.
+        :return: new Path(dest)
+        '''
+        dest = self.__class__(dest, keep_trailing_slash=self._kts)
+        if force:
+            dest.delete()
+        log.info('Move to %s' % (self._path, ))
+        shutil.move(self._path, dest._path)
+        return dest
+
+    def rename(self, newname, force=False):
+        '''Renames leaf to ``new name`` (only the basename is changed).
+        :param force: delete any existing dest.
+        :return: new Path()
+        '''
+        return self.move(self.up() / newname, force)
+
     def delete(self):
-        '''Deletes this path (recursively, if a directory).'''
-        if not self.exists():
-            return
-        if self.isdir():
-            shutil.rmtree(self._path)
-        else:
-            os.remove(self._path)
+        '''Deletes this path (recursively, if a directory).
+        :return: self (for chaining)
+        '''
+        if self.exists:
+            log.info('Delete %s' % (self._path, ))
+            if self.isdir:
+                shutil.rmtree(self._path)
+            else:
+                os.remove(self._path)
+        return self
 
     # Unixisms
     ls = list
+    ln = symlink  # ln -s
     cd = chdir
-    mv = move
     cp = copy
+    mv = move
     rm = delete
-    # and one just cause
-    remove = delete
+    remove = delete # and one just cause
 
-    def touch(self, stamp=None, atime_only=False, mtime_only=False):
-        '''Sets atime and mtime to 'stamp' of leaf component of this path,
-        creating file if necessary.  Defaults to now().
+    def fifo(self, mode=0666):
+        '''os.mkfifo
+        :param mode: [0666]
         '''
+        os.mkfifo(self._path, mode)
+        return self
+
+    mkfifo = fifo  # what it is called in os module
+
+    # rare enough to not name it 'node'
+    def mknode(self, mode=0600, device=0, major=None, minor=None):
+        '''os.mknod
+        :param mode: [0600]
+        :param major: use os.makedev to create device number
+        :param minor: use os.makedev to create device number
+        '''
+        if major is not None and minor is not None:
+            device = os.makeddev(major, minor)
+        os.mknod(self._path, mode, device)
+        return self
+
+    mknod = mknode  # what it is called in os module
+
+    def touch(self, stamp=None, atime=True, mtime=True):
+        '''Sets atime and mtime to 'stamp' of leaf component of this path,
+        creating file if necessary.
+        :param stamp: [now()] seconds since epoch
+        :param atime: [True] set accessed time to stamp
+        :param mtime: [True] set modified time to stamp
+        :return: self (for chaining)
+        '''
+        if not self.exists:
+            print 'no eist'
+            with open(self._path, 'w') as fh:
+                fh.write('')
         if stamp is None:
-            stamp = time.time()
+            times = None
+        else:
+            # annoyingly Python requires times to be set together...
+            if atime:
+                _atime = stamp
+            else:
+                _atime = os.stat(self._path).st_atime
+            if mtime:
+                _mtime = stamp
+            else:
+                _mtime = os.stat(self._path).st_mtime
+            times = (_atime, _mtime)
+        log.info('Touch %s %s' % (stamp, self._path))
+        os.utime(self._path, times)
+        return self
 
-    def mkdir(self):
-        '''Creates directory; if the directory already exists,
-        silently ignore.'''
-        if not self.exists():
+    def mkdir(self, force=False):
+        '''Creates directory.
+        Silently ignore existing directory, file, or link.
+        :param force: [False] remove any existing file, directory or link.
+        :return: self (for chaining)
+        '''
+        if force:
+            self.delete()
+        if not self.exists:
+            log.info('Mkdir %s' % (self._path, ))
             os.makedirs(self._path)
+        return self
 
-    def chown(self, owner='', group='', uid='', gid='', recursive=False):
-        '''Change ownership of leaf component of this path.'''
-        gid = str(gid)  # str so uid 0 (int) isn't seen as False
-        uid = str(uid)
+    def chown(self, owner='', group='', recursive=False):
+        '''Change ownership of leaf component of this path.
+        :param owner: username or user id.  Also, user:group
+        :param group: groupname or group id
+        :param recursive: [False] Apply ownership recursively
+        :return: self (for chaining)
+        '''
+        owner = str(owner)  # str so uid 0 (int) isn't seen as False
+        group = str(group)
         args = list()
         if recursive:
             args.append('-R')
-        if uid:
-            owner = uid
-        if gid:
-            group = gid
         if group:
             owner = '%s:%s' % (owner, group)
         args.append(owner)
         args.append(self._path)
-        # recursive is a pain using os.chown
-        from local import local
+        log.info('Chown %s %s' % (owner, self._path))
+        # TODO: native version not using chown
+        from cu import local
         local['chown'](*args)
+        return self
 
-    def chmod(self, mode='', recursive=False):
-        '''Change file mode of leaf component of this path.'''
-        pass
-
-    def open(self, mode='r'):
-        '''Opens this path as a file.'''
-        return open(self._path, mode)
-
-    def read(self):
-        '''Returns the contents of this file.'''
-        with self.open() as f:
-            return f.read()
-
-    def write(self, data):
-        '''Writes the given data to this file.'''
-        with self.open('w') as f:
-            f.write(data)
-
-    def rename(self, newname):
-        '''Renames this path to the ``new name`` (only the basename is changed).'''
-        return self.move(self.up() / newname)
+    def chmod(self, mode, recursive=False):
+        '''Change file mode of leaf component of this path.
+        :param mode: Any mode recognized by /bin/chown
+        :param recursive: [False] Apply mode recursively
+        :return: self (for chaining)
+        '''
+        mode = str(mode)
+        args = list()
+        if recursive:
+            args.append('-R')
+        args.extend(mode.split())
+        args.append(self._path)
+        log.info('Chmod %s %s' % (mode, self._path))
+        # TODO: native version not using chown
+        from cu import local
+        local['chmod'](*args)
+        return self
 
     @contextmanager
     def __call__(self):
@@ -336,7 +623,7 @@ class Path(object):
             self.chdir(prev)
 
 
-# Facade str.
+# Facade str methods.
 for attr in dir(str):
     if not hasattr(Path, attr):
         method = getattr(str, attr)

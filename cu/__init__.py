@@ -4,6 +4,10 @@ import sys
 import subprocess
 from types import ModuleType
 
+# imported for convience. i.e cu.tmpfile
+from os import tmpfile
+from tempfile import NamedTemporaryFile, mkstemp, mkdtemp
+
 from path import Path
 from local import LocalSystem
 from command import FG, BG, ERROUT

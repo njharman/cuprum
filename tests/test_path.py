@@ -1,11 +1,16 @@
 from __future__ import with_statement
 import os
+import pwd
+import grp
+import tempfile
 import unittest
-#from cu import local, Path, FG, BG, ERROUT
-#from cu import CommandNotFound, ProcessExecutionError, ProcessTimedOut
 from cu import Path
 
 # NOTE: all tests assume *unix OS.
+
+
+def tmpfile(delete=False):
+    return tempfile.NamedTemporaryFile(delete=delete, prefix='cuprum_test_')
 
 
 class PathTestCase(unittest.TestCase):
@@ -51,7 +56,6 @@ class PathTestCase(unittest.TestCase):
         t = Path('/some/path/file.txt')
         self.assertTrue(t.endswith('txt'))
         self.assertIsInstance(t.rstrip('.'), Path)
-        self.assertIsInstance(t.split('.')[0], Path)
         self.assertIsInstance(t.rfind('.'), int)
         self.assertIsInstance(t.rfind('.'), int)
         self.assertIsInstance(t.islower(), bool)
@@ -97,6 +101,23 @@ class PathTestCase(unittest.TestCase):
         self.assertTrue(Path('/adf'))
         self.assertFalse(Path(''))
 
+    def test_abs(self):
+        tests = (
+            ('', ''),
+            ('.', os.getcwd()),
+            ('/', '/'),
+            ('./file.txt', os.getcwd() + '/file.txt'),
+            ('file.txt', os.getcwd() + '/file.txt'),
+            ('/../../file.txt', '/file.txt'),
+            ('/path/to/some/place', '/path/to/some/place'),
+            ('/path/../place/', '/place/'),
+            ('/path/to/some/../../foo/place/', '/path/foo/place/'),
+            )
+        for test, expected in tests:
+            t = Path(test).abs
+            self.assertIsInstance(t, Path)
+            self.assertEqual(expected, t, test)
+
     def test_basename(self):
         tests = (
             ('', ''),
@@ -110,9 +131,9 @@ class PathTestCase(unittest.TestCase):
             ('/stupid/path/with spaces', 'with spaces'),
             )
         for test, expected in tests:
-            t = Path(test)
-            self.assertIsInstance(t.basename, basestring)
-            self.assertEqual(expected, t.basename, test)
+            t = Path(test).basename
+            self.assertIsInstance(t, basestring)
+            self.assertEqual(expected, t, test)
 
     def test_dirname(self):
         tests = (
@@ -126,12 +147,95 @@ class PathTestCase(unittest.TestCase):
             ('/path/with spaces/yo', '/path/with spaces'),
             )
         for test, expected in tests:
-            t = Path(test)
-            self.assertIsInstance(t.dirname, Path)
-            self.assertEqual(expected, t.dirname)
+            t = Path(test).dirname
+            self.assertIsInstance(t, Path)
+            self.assertEqual(expected, t)
 
-    # requires being run as root
-    def ftest_group_owner_chown(self):
+    def test_exists(self):
+        t = Path('/tmp')
+        self.assertTrue(t.exists)
+        t = Path('/etc/passwd')
+        self.assertTrue(t.exists)
+        t = Path('/I/like/oatmeal/cookies')
+        self.assertFalse(t.exists)
+
+    def test_isabs(self):
+        abs = (
+            '/tmp',
+            )
+        relative = (
+            'tmp',
+            './tmp',
+            '../tmp',
+                )
+        for path in abs:
+            t = Path(path)
+            self.assertTrue(t.isabs)
+            self.assertFalse(t.isrelative)
+        for path in relative:
+            t = Path(path)
+            self.assertFalse(t.isabsolute)
+            self.assertTrue(t.isrelative)
+
+    def test_isdir(self):
+        self.assertTrue(Path('/tmp').isdir)
+        self.assertFalse(Path('/etc/passwd').isdir)
+
+    def test_isfile(self):
+        self.assertFalse(Path('/tmp').isfile)
+        self.assertTrue(Path('/etc/passwd').isfile)
+
+    def test_islink(self):
+        self.assertFalse(Path('/tmp').islink)
+        self.assertFalse(Path('/etc/passwd').islink)
+        #TODO: test actual link
+
+    def test_ismount(self):
+        self.assertTrue(Path('/proc').ismount)
+        self.assertFalse(Path('/etc/passwd').ismount)
+
+    def test_times(self):
+        t = Path('/tmp')
+        t.atime
+        t.mtime
+        t.ctime
+
+    def test_size(self):
+        Path('/tmp').size
+        Path('/etc/passwd').size
+
+    def test_group_owner(self):
+        self.assertEqual('root', Path('/tmp').owner)
+        self.assertEqual('root', Path('/etc/passwd').group)
+        fh = tmpfile()
+        try:
+            t = Path(fh.name)
+            # these aren't actually changing anything (need to be root for that)
+            # but they do at least exercise the code
+            t.owner = pwd.getpwuid(os.getuid()).pw_name
+            t.group = grp.getgrgid(os.getgid()).gr_name
+            t.owner = '%s:%s' % (t.owner, t.group)
+            t.chown(t.owner)
+            t.chown(t.owner, t.group)
+            t.chown('%s:%s' % (t.owner, t.group), recursive=True)
+        finally:
+            os.remove(fh.name)
+
+    def test_mode(self):
+        #self.assertEqual('root', Path('/etc/passwd').mode)
+        #self.assertEqual('root', Path('/tmp').mode)
+        fh = tmpfile()
+        try:
+            t = Path(fh.name)
+            t.mode = 644
+            t.chmod(666)
+            t.chmod('u+x')
+            t.chmod('0777', recursive=True)
+        finally:
+            os.remove(fh.name)
+
+    @unittest.skip('TODO: changing owner/group requires root.')
+    def test_group_owner_chown(self):
         PATH = '/tmp/delme.txt'
         path = Path(PATH)
         os.system('rm %s' % PATH)
@@ -158,29 +262,18 @@ class PathTestCase(unittest.TestCase):
         self.assertEqual('nogroup', path.group)
         path.delete()
 
-    def test_isfile(self):
-        t = Path('/tmp')
-        self.assertFalse(t.isfile())
-        t = Path('/etc/passwd')
-        self.assertTrue(t.isfile())
-
-    def test_isdir(self):
-        t = Path('/tmp')
-        self.assertTrue(t.isdir())
-        t = Path('/etc/passwd')
-        self.assertFalse(t.isdir())
-
-    def test_exists(self):
-        t = Path('/tmp')
-        self.assertTrue(t.exists())
-        t = Path('/etc/passwd')
-        self.assertTrue(t.exists())
-        t = Path('/I/like/oatmeal/cookies')
-        self.assertFalse(t.exists())
-
     def test_stat(self):
         t = Path('/tmp')
-        self.assertTrue(t.stat())
+        t.stat()
+        t.stat(followlinks=False)  # TODO: test actual symlink
+        t.statfs()
+        t.statvfs()
+
+    def test_split(self):
+        # testing that Python's string.split works, just that os.sep is default
+        # rather than whitespace.
+        expected = ['/', 'some', ' path', ' ', 'awesome.txt']
+        self.assertSequenceEqual(expected, Path('/some/ path/ /awesome.txt').split())
 
     def test_join(self):
         tests = (
@@ -207,6 +300,10 @@ class PathTestCase(unittest.TestCase):
         t = Path('/foo/bar')
         self.assertEqual('/foo/car', t / '../car')
 
+    @unittest.skip('TODO:')
+    def test_expand(self):
+        pass
+
     def test_glob(self):
         t = Path('/foo/bar')
         self.assertEqual([], t.glob('*'))
@@ -216,19 +313,89 @@ class PathTestCase(unittest.TestCase):
         self.assertEqual('/', Path('/foo/bar').up(2))
         self.assertEqual('/', Path('/foo/bar').up(8))
 
-    def test_walk(self):
+    def test_walk_iter(self):
         t = Path('/etc/passwd')
-        for f in t.walk():
+        for f in t.walk_iter():
             pass
+        t = Path('/doesnot_exist')
+
+    def test_walk_path(self):
+        Path('/etc/passwd').walk_path(lambda *s: s)
+        Path('/doesnot_exist').walk_path(lambda *s: s)
 
     def test_list(self):
-        t = Path('/tmp')
-        t.list()
+        Path('/tmp').list()
+        self.assertRaises(OSError, Path('/doesnot_exist').list)
+
+    def test_links(self):
+        for method in ('link', 'hardlink', 'symlink'):
+            fh = tmpfile()
+            linkname = '/tmp/cuprum_test_links'
+            try:
+                t = Path(fh.name)
+                f = getattr(t, method)(linkname)
+                self.assertIsInstance(f, Path)
+                self.assertEqual(linkname, f)
+                f = getattr(t, method)(linkname, force=True)
+                self.assertIsInstance(f, Path)
+                self.assertEqual(linkname, f)
+            finally:
+                os.remove(fh.name)
+                os.remove(linkname)
+
+    def test_readlink(self):
+        self.assertRaises(OSError, Path('/tmp').readlink)
 
     def test_chdir(self):
         self.assertTrue('/tmp' != os.getcwd())
-        curdir = os.getcwd()
-        t = Path('/tmp')
-        t.chdir()
-        self.assertEqual('/tmp', os.getcwd())
-        os.chdir(curdir)
+        old_cwd = os.getcwd()
+        try:
+            Path('/tmp').chdir()
+            self.assertEqual('/tmp', os.getcwd())
+            self.assertRaises(OSError, Path('/doesnot_exist').chdir)
+        finally:
+            os.chdir(old_cwd)
+
+    def test_fifo(self):
+        name = '/tmp/cuprum_test_fifo'
+        try:
+            Path(name).fifo()
+        finally:
+            os.remove(name)
+
+    def test_mknode(self):
+        name = '/tmp/cuprum_test_mknode'
+        try:
+            Path(name).mknode()
+        finally:
+            os.remove(name)
+
+    def test_touch(self):
+        fh = tmpfile()
+        try:
+            t = Path(fh.name)
+            t.touch(1970)
+            foo = os.stat(fh.name)
+            self.assertEqual(1970, foo.st_atime)
+            self.assertEqual(1970, foo.st_mtime)
+            t.touch(12, mtime=False)
+            foo = os.stat(fh.name)
+            self.assertEqual(12, foo.st_atime)
+            self.assertEqual(1970, foo.st_mtime)
+            t.touch(28, atime=False)
+            foo = os.stat(fh.name)
+            self.assertEqual(12, foo.st_atime)
+            self.assertEqual(28, foo.st_mtime)
+            t.touch()
+            foo = os.stat(fh.name)
+            self.assertNotEqual(12, foo.st_atime)
+            self.assertNotEqual(28, foo.st_mtime)
+        finally:
+            os.remove(fh.name)
+
+    def test_mkdir(self):
+        t = Path('/tmp/cuprum_test_mkdir')
+        if os.path.exists(str(t)):
+            os.rmdir(str(t))
+        t.mkdir()
+        t.mkdir()  # silently ignores existing

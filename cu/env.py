@@ -7,7 +7,7 @@ from cu.path import Path
 
 class Environment(object):
     '''Machine's environment; exposes a dict-like interface.
-    TODO: 
+    TODO:
     '''
     CASE_SENSITIVE = os.name != 'nt'
 
@@ -67,10 +67,10 @@ class Environment(object):
         '''Updates the environment.'''
         proper = dict()
         if self.CASE_SENSITIVE:
-            for k,v in kwargs.items():
+            for k, v in kwargs.items():
                 proper[k] = str(v)
         else:
-            for k,v in kwargs.items():
+            for k, v in kwargs.items():
                 proper[k.upper()] = str(v)
         self._environment.update(**proper)
 
@@ -82,7 +82,7 @@ class Environment(object):
     def path(self, safe=False):
         '''The system's ``PATH`` (as an easy-to-manipulate list).
         Returned object will update environment variable PATH.  But, unless
-        safe=True changes to PATH from other sources will not be noticed. 
+        safe=True changes to PATH from other sources will not be noticed.
         :param safe: if True, PATH env var will be reread prior to every operation.
         '''
         return SystemPathList(self._environment, self._path_factory, safe)
@@ -119,7 +119,7 @@ class Environment(object):
 
     def expand(self, text):
         '''Expands any environment variables and home shortcuts found in ``text``
-        (like ``os.path.expanduser`` combined with ``os.path.expandvars``)
+        (like ``os.path.expanduser`` after ``os.path.expandvars``)
         :param text: string containing environment variables (as ``$FOO``) or
              home shortcuts (as ``~/.bashrc``)
         :returns: expanded string
@@ -131,7 +131,7 @@ class Environment(object):
         '''Context manager for temporal modifications of the environment.
         Any time you enter the context, a copy of the old environment is stored,
         and then restored, when the context exits.
-        :param kwargs: ENVIRONMENT_VAR => value 
+        :param kwargs: ENVIRONMENT_VAR => value
         '''
         prev = self._environment.copy()
         self.update(**kwargs)
@@ -172,12 +172,12 @@ class SystemPathList(list):
     @wrapper
     def __getitem__(self, i):
         return super(SystemPathList, self).__getitem__(i)
-  
+
     @wrapper
     def __setitem__(self, i, value):
         super(SystemPathList, self).__setitem__(i, value)
         self.dump()
-  
+
     @wrapper
     def append(self, path):
         super(SystemPathList, self).append(self._path_factory(path))
