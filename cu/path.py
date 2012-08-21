@@ -221,40 +221,35 @@ class Path(object):
         '''Size in bytes of leaf component of this path.'''
         return os.path.getsize(self._path)
 
-    @property
-    def owner(self):
-        '''The owner of leaf component of this path.'''
+    def _get_owner(self):
         stat = self.stat()
         return pwd.getpwuid(stat.st_uid)[0]
 
-    @owner.setter
-    def owner(self, owner):
-        '''Set owner and optional group with owner:group syntax.'''
+    def _set_owner(self, owner):
         if ':' in owner:
             owner, self.group = owner.split(':', 1)
         log.info('Owner %s set on %s' % (owner, self._path))
         self.chown(owner)
 
-    @property
-    def group(self):
-        '''The group of leaf component of this path.'''
+    owner = property(_get_owner, _set_owner, doc='owner of leaf component of this path.')
+
+    def _get_group(self):
         stat = self.stat()
         return grp.getgrgid(stat.st_gid)[0]
 
-    @group.setter
-    def group(self, group):
+    def _set_group(self, group):
         self.chown(group=group)
 
-    @property
-    def mode(self):
-        '''The mode of leaf component of this path.'''
+    group = property(_get_group, _set_group, doc='group of leaf component of this path.')
+
+    def _get_mode(self):
         stat = self.stat()
         return stat.st_mode # TODO: translate this into something that makes sense
 
-    @mode.setter
-    def mode(self, flags):
-        '''Set file mode of leaf component of this path.'''
+    def _set_mode(self, flags):
         self.chmod(flags)
+
+    mode = property(_get_mode, _set_mode, doc='file mode of leaf component of this path.')
 
     def stat(self, followlinks=True):
         '''Same as os.stat(self).
