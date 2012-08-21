@@ -1,10 +1,15 @@
 from __future__ import with_statement
+try:
+    import unittest2 as unittest
+except ImportError:
+    import unittest
 import os
 import pwd
 import grp
 import tempfile
-import unittest
+
 from cu import Path
+
 
 # NOTE: all tests assume *unix OS.
 
@@ -66,9 +71,11 @@ class PathTestCase(unittest.TestCase):
         self.assertIsInstance(t[:3], Path)
 
     def test_equality(self):
+
         class FooBar:
             def __str__(self):
                 return '/foo/bar'
+
         equal = (
                 (Path(''), Path('')),
                 (Path(''), ''),

@@ -450,9 +450,12 @@ class Path(object):
         os.chdir(self._path)
         return self
 
-    def copy(self, dest, force=False):
-        '''Copies this path (recursively, if a directory) to the destination
+    def copy(self, dest, force=False, symlinks=False):
+        '''Copies this path (recursively, if a directory) to the destination.
         path.
+        unless force=True.
+        :param force: [False] existing dest is deleted
+        :parm symlinks: [False] passed to shutil.copytree
         :return: new Path(dest)
         '''
         dest = self.__class__(dest, keep_trailing_slash=self._kts)
@@ -460,7 +463,7 @@ class Path(object):
             dest.delete()
         log.info('Copy to %s' % (self._path, ))
         if self.isdir:
-            shutil.copytree(self._path, dest)
+            shutil.copytree(self._path, dest, symlinks)
         else:
             shutil.copy2(self._path, dest)
         return dest

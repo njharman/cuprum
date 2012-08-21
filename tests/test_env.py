@@ -1,5 +1,9 @@
+from __future__ import with_statement
+try:
+    import unittest2 as unittest
+except ImportError:
+    import unittest
 import os
-import unittest
 
 from cu import local, Path
 from cu import CommandNotFound, ProcessExecutionError

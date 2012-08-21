@@ -5,7 +5,6 @@ import subprocess
 from types import ModuleType
 
 # imported for convience. i.e cu.tmpfile
-from os import tmpfile
 from tempfile import NamedTemporaryFile, mkstemp, mkdtemp
 
 from path import Path

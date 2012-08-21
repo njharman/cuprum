@@ -1,14 +1,16 @@
+from __future__ import with_statement
+import unittest
 import re
 import os
 import sys
-import pep8
-import unittest
-from distutils.version import LooseVersion
 try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
 
+from distutils.version import LooseVersion
+
+import pep8
 
 PEP8_VERSION = LooseVersion(pep8.__version__)
 PEP8_MAX_OLD_VERSION = LooseVersion('1.0.1')
