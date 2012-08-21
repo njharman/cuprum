@@ -156,7 +156,7 @@ class SystemPathList(list):
         :param safe: if True, PATH env var will be reread prior to every operation.
         '''
         self._environment = environment
-        self._path_factory = lambda *a, **k: path_factory(*a, keep_trailing_slash=False, **k)
+        self._path_factory = lambda *a, **k: path_factory(*a, **dict(keep_trailing_slash=False, **k))  # dict garbage cause keyword after *args is Python 2.5 syntax error
         self._safe = safe
         self.load()
 
