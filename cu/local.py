@@ -2,17 +2,17 @@ from __future__ import with_statement
 import os
 import sys
 import stat
+import tempfile
+import contextlib
 import logging
-from tempfile import mkdtemp
-from contextlib import contextmanager
+log = logging.getLogger('cu.local')
+
+import six
 
 from cu.env import Environment
 from cu.path import Path, CWD
 from cu.session import ShellSession
-from cu.command import Command
-from cu.exception import CommandNotFound
-
-log = logging.getLogger('cu.local')
+from cu.command import Command, CommandNotFound
 
 
 class LocalSystem(object):
@@ -27,6 +27,7 @@ class LocalSystem(object):
       - ``encoding`` - Local encoding (``sys.getfilesystemencoding()``)
       - ''session()'' - ShellSession <cu.session.ShellSession>
       - ''tempdir()'' - Temp directory context manager
+      - ''tempfile()'' - Temp file context manager
     '''
 
     def __init__(self):
@@ -99,12 +100,37 @@ class LocalSystem(object):
         '''
         return ShellSession(self['sh'].popen())
 
-    @contextmanager
-    def tempdir(self):
-        '''A context manager that creates a temporary directory, which is
-        removed when the context exits.'''
-        path = Path(mkdtemp())
+    @contextlib.contextmanager
+    def tempdir(self, *args, **kwargs):
+        '''Context manager that creates a temporary directory, which is
+        removed when the context exits.
+        :param suffix
+        :yields: :class:`Path` object
+        '''
+        path = Path(tempfile.mkdtemp(*args, **kwargs))
         try:
             yield path
         finally:
             path.delete()
+
+    @contextlib.contextmanager
+    def tempfile(self, mode='w+b', bufsize=-1, suffix='', prefix='tmp', dir=None):
+        '''Context manager that creates a named temporary file, which is
+        removed when the context exits.
+
+        :yields: file handle object with attribut 'name', a :class:`Path` object
+        '''
+        # Explicitly named kwargs cause order changes in Python 3.x
+        # Also, bufsize renamed buffering
+        kwargs = dict(mode=mode, suffix=suffix, prefix=prefix, dir=dir, delete=False)
+        if six.PY3:
+            if bufsize >= 0:
+                kwargs['buffering'] = bufsize
+        else:
+            kwargs['bufsize'] = bufsize
+        fh = tempfile.NamedTemporaryFile(**kwargs)
+        fh.name = Path(fh.name)
+        try:
+            yield fh
+        finally:
+            fh.name.delete()

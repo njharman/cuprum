@@ -4,9 +4,12 @@ try:
 except ImportError:
     import unittest
 import os
+import sys
 import pwd
 import grp
 import tempfile
+
+import six
 
 from cu import Path
 
@@ -80,12 +83,12 @@ class PathTestCase(unittest.TestCase):
                 (Path(''), Path('')),
                 (Path(''), ''),
                 (Path('/foo/bar'), Path('/foo/bar')),
-                (Path('/foo/bar'), u'/foo/bar'),
+                (Path('/foo/bar'), six.u('/foo/bar')),
                 (Path('/foo/bar'), FooBar()),
                 )
         notequal = (
                 (Path('/foo/bar'), Path('/foo/bar/')),
-                (Path('/foo/bar'), u'/foo/bar/'),
+                (Path('/foo/bar'), six.u('/foo/bar/')),
                 (Path('crazy'), FooBar()),
                 (Path('crazy'), 'sause'),
                 (Path('crazy'), True),
@@ -139,7 +142,7 @@ class PathTestCase(unittest.TestCase):
             )
         for test, expected in tests:
             t = Path(test).basename
-            self.assertIsInstance(t, basestring)
+            self.assertIsInstance(t, six.string_types)
             self.assertEqual(expected, t, test)
 
     def test_dirname(self):
@@ -326,6 +329,7 @@ class PathTestCase(unittest.TestCase):
             pass
         t = Path('/doesnot_exist')
 
+    @unittest.skipIf(int(sys.version[0]) >= 3, 'walk_path deprecated in Python >= 3.x')
     def test_walk_path(self):
         Path('/etc/passwd').walk_path(lambda *s: s)
         Path('/doesnot_exist').walk_path(lambda *s: s)

@@ -152,3 +152,12 @@ class LocalMachineTest(unittest.TestCase):
             with open(str(dir / 'test.txt'), 'r') as f:
                 self.assertEqual(f.read(), 'hello world')
         self.assertFalse(dir.exists)
+
+    def test_tempfile(self):
+        # text mode otherwise Py3 bitches about string not being bytes
+        with local.tempfile('w+t') as fh:
+            self.assertTrue(fh.name.isfile)
+            fh.write('hello world')
+            fh.seek(0)
+            self.assertEqual(fh.read(), 'hello world')
+        self.assertFalse(fh.name.exists)

@@ -3,21 +3,22 @@
 os.path really pisses me off. It's full of suprising behavior:
 
   - normpath('') == '.'
-  - normpath('fu/') == 'fu'
-  - normpath('/') == '/'
+  - normpath('fu/') == 'fu' vs normpath('/') == '/'
   - join('/foo/bar', '/wtf') = '/wtf'
   - join('file.txt', '') = 'file.txt/'
 '''
+from __future__ import with_statement
 import os
 import pwd
 import grp
 import glob
 import shutil
-from contextlib import contextmanager
-
+import contextlib
 import logging
 log = logging.getLogger('cu.path')
 # log.info operations that change filesystem, otherwise quiet
+
+import six
 
 # TODO:
 # path.realpath
@@ -43,7 +44,6 @@ class Path(object):
     Class attributes
       - sep: os.path.sep
       - unicode: os.path.supports_unicode_filenames
-
     '''
     sep = os.path.sep
     unicode = os.path.supports_unicode_filenames
@@ -104,7 +104,7 @@ class Path(object):
         # Trailing slash is significant.  /foo/bar/ != /foo/bar
         if isinstance(other, Path):
             other = other._path
-        elif not isinstance(other, basestring):
+        elif not isinstance(other, six.string_types):
             other = str(other)
         return os.path.normcase(self._path) == os.path.normcase(other)
 
@@ -119,7 +119,7 @@ class Path(object):
 
     def _pathize(self, result):
         '''Dynamically modify returns of string funcs into Path instances.'''
-        if isinstance(result, basestring):
+        if isinstance(result, six.string_types):
             return self.__class__(result, keep_trailing_slash=self._kts)
         elif isinstance(result, list):
             return list(self.__class__(r, keep_trailing_slash=self._kts) for r in result)
@@ -388,8 +388,7 @@ class Path(object):
     walkiter = walk_iter  # for api consistancy
 
     def walk_path(self, visit, arg=None):
-        '''os.path.walk
-        Deprecated in py 3
+        '''os.path.walk Does not exist Python >= 3.x
         :param visit: func(arg, dirname, names)
         :param arg: [None] passed to visit
         :return: self (for chaining)
@@ -511,9 +510,9 @@ class Path(object):
     rm = delete
     remove = delete # and one just cause
 
-    def fifo(self, mode=0666):
+    def fifo(self, mode=666):
         '''os.mkfifo
-        :param mode: [0666]
+        :param mode: [666]
         '''
         os.mkfifo(self._path, mode)
         return self
@@ -521,9 +520,9 @@ class Path(object):
     mkfifo = fifo  # what it is called in os module
 
     # rare enough to not name it 'node'
-    def mknode(self, mode=0600, device=0, major=None, minor=None):
+    def mknode(self, mode=600, device=0, major=None, minor=None):
         '''os.mknod
-        :param mode: [0600]
+        :param mode: [600]
         :param major: use os.makedev to create device number
         :param minor: use os.makedev to create device number
         '''
@@ -543,7 +542,6 @@ class Path(object):
         :return: self (for chaining)
         '''
         if not self.exists:
-            print 'no eist'
             with open(self._path, 'w') as fh:
                 fh.write('')
         if stamp is None:
@@ -616,7 +614,7 @@ class Path(object):
         local['chmod'](*args)
         return self
 
-    @contextmanager
+    @contextlib.contextmanager
     def __call__(self):
         '''Context manager ``chdir`` into self and back to the original
         directory; much like ``pushd``/``popd``.
@@ -662,7 +660,7 @@ class CWD(Path):
         os.chdir(directory)
         self.__init_path__(os.getcwd())
 
-    @contextmanager
+    @contextlib.contextmanager
     def __call__(self, directory):
         '''A context manager used to ``chdir`` into a directory and then
         ``chdir`` back to the previous location; much like ``pushd``/``popd``.

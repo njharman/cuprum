@@ -1,6 +1,9 @@
+from __future__ import with_statement
 import os
 import functools
-from contextlib import contextmanager
+import contextlib
+import logging
+log = logging.getLogger('cu.env')
 
 from cu.path import Path
 
@@ -126,7 +129,7 @@ class Environment(object):
         '''
         return os.path.expanduser(os.path.expandvars(text))
 
-    @contextmanager
+    @contextlib.contextmanager
     def __call__(self, **kwargs):
         '''Context manager for temporal modifications of the environment.
         Any time you enter the context, a copy of the old environment is stored,

@@ -1,9 +1,11 @@
+from __future__ import with_statement
 import time
 import random
 import logging
-log = logging.getLogger('cu.shell')
+log = logging.getLogger('cu.session')
 
 import six
+
 from cu.command import BaseCommand, run_proc
 
 

@@ -3,10 +3,9 @@ import unittest
 import re
 import os
 import sys
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+
+from six.moves import cStringIO
+StringIO = cStringIO
 
 from distutils.version import LooseVersion
 
