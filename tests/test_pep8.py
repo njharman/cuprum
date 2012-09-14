@@ -3,10 +3,7 @@ import unittest
 import re
 import os
 import sys
-
-from six.moves import cStringIO
-StringIO = cStringIO
-
+import cStringIO as StringIO
 from distutils.version import LooseVersion
 
 import pep8
@@ -32,10 +29,8 @@ NAMES_TO_SKIP = (
     'docs',
     'dist',
     'build',
-    'tests',
-    'setup.py',
     )
-NAMES_TO_SKIP = (re.compile('^%s' % n) for n in NAMES_TO_SKIP)
+NAMES_TO_SKIP = [re.compile('^%s' % n) for n in NAMES_TO_SKIP]
 
 
 class RedirectIO(object):
@@ -75,22 +70,24 @@ for (dirpath, dirnames, filenames) in os.walk(ROOT, followlinks=True):
         for path in paths:
             if regex.match(path):
                 dirnames.remove(path)
-    for filename in filenames:
+        files = filenames[:]  # lame list copy
+    for filename in [f for f in filenames if not regex.match(f)]:
         if not filename.endswith('.py'):
-            continue
-        if filename in NAMES_TO_SKIP:
             continue
         fullpath = os.path.join(dirpath, filename)
         if PEP8_VERSION < PEP8_MIN_NEW_VERSION:
             def closure(self, fullpath=fullpath):
-                pep8.process_options(['--first', fullpath])
+                pep8.process_options([
+                    '--first', fullpath,
+                    '--ignore', ','.join(PEP8_IGNORE)],
+                    )
                 pep8.input_file(fullpath)
                 if len(pep8.get_statistics()):
                     self.fail('PEP8 issue in "%s"' % fullpath)
         else:
             def closure(self, fullpath=fullpath):
                 checker = pep8.Checker(fullpath, options=self.options)
-                capture = StringIO()
+                capture = StringIO.StringIO()
                 with RedirectIO(capture):
                     errors = checker.check_all()
                 if errors > 0:

@@ -148,7 +148,7 @@ class BaseCommand(object):
         return ' '.join(self.formulate())
 
     def __repr__(self):
-        return '%s(%r)' % (self.__name__, self.executable)
+        return '%s("%s")' % (self.__class__.__name__, self.executable)
 
     def __or__(self, other):
         '''Creates a pipe with the other command.'''
@@ -177,7 +177,7 @@ class BaseCommand(object):
         if not args:
             return self
         if isinstance(self, BoundCommand):
-            return BoundCommand(self.cmd, self.args + tuple(args))
+            return BoundCommand(self.executable, self.args + tuple(args))
         else:
             return BoundCommand(self, args)
 
@@ -249,9 +249,6 @@ class Command(BaseCommand):
         self.cwd = None
         self.env = None
 
-    def __str__(self):
-        return str(self.executable)
-
     def _get_encoding(self):
         return self.encoding
 
@@ -306,45 +303,45 @@ class Command(BaseCommand):
 
 
 class BoundCommand(BaseCommand):
-    def __init__(self, cmd, args):
+    def __init__(self, executable, args):
         super(BoundCommand, self).__init__()
-        self.cmd = cmd
+        self.executable = executable
         self.args = args
 
     def _get_encoding(self):
-        return self.cmd._get_encoding()
+        return self.executable._get_encoding()
 
     def formulate(self, level=0, args=()):
-        return self.cmd.formulate(level + 1, self.args + tuple(args))
+        return self.executable.formulate(level + 1, self.args + tuple(args))
 
     def popen(self, args=(), **kwargs):
         if isinstance(args, str):
             args = (args,)
-        return self.cmd.popen(self.args + tuple(args), **kwargs)
+        return self.executable.popen(self.args + tuple(args), **kwargs)
 
 
 class Pipeline(BaseCommand):
-    def __init__(self, srccmd, dstcmd):
+    def __init__(self, src_executable, dst_executable):
         super(BaseCommand, self).__init__()
-        self.srccmd = srccmd
-        self.dstcmd = dstcmd
+        self.src_executable = src_executable
+        self.dst_executable = dst_executable
 
     def __repr__(self):
-        return 'Pipeline(%r, %r)' % (self.srccmd, self.dstcmd)
+        return 'Pipeline(%r, %r)' % (self.src_executable, self.dst_executable)
 
     def _get_encoding(self):
-        return self.srccmd._get_encoding() or self.dstcmd._get_encoding()
+        return self.src_executable._get_encoding() or self.dst_executable._get_encoding()
 
     def formulate(self, level=0, args=()):
-        return self.srccmd.formulate(level + 1) + ['|'] + self.dstcmd.formulate(level + 1, args)
+        return self.src_executable.formulate(level + 1) + ['|'] + self.dst_executable.formulate(level + 1, args)
 
     def popen(self, args=(), **kwargs):
         src_kwargs = kwargs.copy()
         src_kwargs['stdout'] = subprocess.PIPE
         src_kwargs['stderr'] = subprocess.PIPE
-        srcproc = self.srccmd.popen(args, **src_kwargs)
+        srcproc = self.src_executable.popen(args, **src_kwargs)
         kwargs['stdin'] = srcproc.stdout
-        dstproc = self.dstcmd.popen(**kwargs)
+        dstproc = self.dst_executable.popen(**kwargs)
         # allow p1 to receive a SIGPIPE if p2 exits
         srcproc.stdout.close()
         srcproc.stderr.close()
@@ -359,19 +356,19 @@ class BaseRedirection(BaseCommand):
     KWARG = None
     MODE = None
 
-    def __init__(self, cmd, file):
+    def __init__(self, executable, file):
         super(BaseRedirection, self).__init__()
-        self.cmd = cmd
+        self.executable = executable
         self.file = file
 
     def __repr__(self):
-        return '%s(%r, %r)' % (self.__class__.__name__, self.cmd, self.file)
+        return '%s(%r, %r)' % (self.__class__.__name__, self.executable, self.file)
 
     def _get_encoding(self):
-        return self.cmd._get_encoding()
+        return self.executable._get_encoding()
 
     def formulate(self, level=0, args=()):
-        return self.cmd.formulate(level + 1, args) + [self.SYM, shquote(getattr(self.file, 'name', self.file))]
+        return self.executable.formulate(level + 1, args) + [self.SYM, shquote(getattr(self.file, 'name', self.file))]
 
     def popen(self, args=(), **kwargs):
         from cu.local import Path
@@ -383,7 +380,7 @@ class BaseRedirection(BaseCommand):
             kwargs[self.KWARG] = self.file
             f = None
         try:
-            return self.cmd.popen(args, **kwargs)
+            return self.executable.popen(args, **kwargs)
         finally:
             if f:
                 f.close()
@@ -418,16 +415,16 @@ class ERROUT(int):
 class StdinDataRedirection(BaseCommand):
     CHUNK_SIZE = 16000
 
-    def __init__(self, cmd, data):
+    def __init__(self, executable, data):
         super(StdinDataRedirection, self).__init__()
-        self.cmd = cmd
+        self.executable = executable
         self.data = data
 
     def _get_encoding(self):
-        return self.cmd._get_encoding()
+        return self.executable._get_encoding()
 
     def formulate(self, level=0, args=()):
-        return ['echo %s' % (shquote(self.data),), '|', self.cmd.formulate(level + 1, args)]
+        return ['echo %s' % (shquote(self.data),), '|', self.executable.formulate(level + 1, args)]
 
     def popen(self, args=(), **kwargs):
         if 'stdin' in kwargs and kwargs['stdin'] != subprocess.PIPE:
@@ -442,7 +439,7 @@ class StdinDataRedirection(BaseCommand):
             data = data[self.CHUNK_SIZE:]
         f.seek(0)
         try:
-            return self.cmd.popen(args, stdin=f, **kwargs)
+            return self.executable.popen(args, stdin=f, **kwargs)
         finally:
             f.close()
 
@@ -526,8 +523,8 @@ class BG(ExecutionModifier):
         future = sleep[5] & BG       # a future expecting an exit code of 0
         future = sleep[5] & BG(7)    # a future expecting an exit code of 7
     '''
-    def __rand__(self, cmd):
-        return Future(cmd.popen(), self.retcode)
+    def __rand__(self, executable):
+        return Future(executable.popen(), self.retcode)
 
 
 class FG(ExecutionModifier):
@@ -542,8 +539,8 @@ class FG(ExecutionModifier):
         vim & FG       # run vim in the foreground, expecting an exit code of 0
         vim & FG(7)    # run vim in the foreground, expecting an exit code of 7
     '''
-    def __rand__(self, cmd):
-        cmd(retcode=self.retcode, stdin=None, stdout=None, stderr=None)
+    def __rand__(self, executable):
+        executable(retcode=self.retcode, stdin=None, stdout=None, stderr=None)
 
 
 class CommandNotFound(Exception):

@@ -12,7 +12,7 @@ from cu import CommandNotFound, ProcessExecutionError, ProcessTimedOut
 local.cwd.chdir('tests')
 
 
-class LocalMachineTest(unittest.TestCase):
+class LocalMachineTestCase(unittest.TestCase):
     def test_imports(self):
         from cu.syspath import ls
         self.assertTrue('test_local.py' in local['ls']().splitlines())
