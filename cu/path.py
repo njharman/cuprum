@@ -302,7 +302,7 @@ class Path(object):
             bits = ('', )
         else:
             bits = (os.getcwd(), self)
-        # This garbage is cause keyword after *args is syntax error in Python 2.5
+        # This garbage cause keyword after *args is syntax error in Python 2.5
         lame = self._pathize('')
         lame.__init_path__(*bits)
         return lame
@@ -334,7 +334,10 @@ class Path(object):
         if bits:
             if self._kts:
                 bits.append(self.sep)
-            return self.__class__(*bits, keep_trailing_slash=self._kts)
+            # This garbage cause keyword after *args is syntax error in Python 2.5
+            lame = self._pathize('')
+            lame.__init_path__(*bits)
+            return lame
         elif self.is_absolute:
             return self._pathize(self.sep)
         else:

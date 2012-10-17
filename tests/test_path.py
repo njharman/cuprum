@@ -29,7 +29,7 @@ class PathTestCase(unittest.TestCase):
     def test_some_imports(self):
         from cu.path import commonprefix, sameopenfile, samestat
         for f in commonprefix, sameopenfile, samestat:
-            self.assertTrue(callable(f))
+            self.assertTrue(six.callable(f))
 
     def test_construction(self):
         # normpath'd except empty paths and trailing slashes are preserved
