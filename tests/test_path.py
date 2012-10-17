@@ -24,30 +24,52 @@ def tmpfile(delete=False):
 
 
 class PathTestCase(unittest.TestCase):
+    longMessage = True
+
+    def test_some_imports(self):
+        from cu.path import commonprefix, sameopenfile, samestat
+        for f in commonprefix, sameopenfile, samestat:
+            self.assertTrue(callable(f))
+
     def test_construction(self):
         # normpath'd except empty paths and trailing slashes are preserved
         tests = (
             ('', ''),
+            ('.', '.'),
+            ('..', '..'),
             ('/', '/'),
+            ('/..', '/'),
             ('/../', '/'),
+            ('../', '../'),
+            ('path/..', ''),
+            ('path/../', ''),
+            ('path/../../', '../'),
             ('foo.txt', 'foo.txt'),
             ('some/path////', 'some/path/'),
             ('/some/abs/path/', '/some/abs/path/'),
             ('full/path/foo.txt', 'full/path/foo.txt'),
             ('normalize/../me/prleaze.txt', 'me/prleaze.txt'),
+            ('normalize/../me/', 'me/'),
             (Path('from/Path'), 'from/Path'),
             )
         for test, expected in tests:
             t = Path(test)
-            self.assertEqual(expected, t)
+            self.assertEqual(expected, t, test)
         t = Path('from', 'bits')
         self.assertEqual('from/bits', t)
 
-    def test_no_trailing_slash(self):
+    def test_no_trailing_slash_construction(self):
         tests = (
             ('', ''),
+            ('.', '.'),
+            ('..', '..'),
             ('/', '/'),
+            ('/..', '/'),
             ('/../', '/'),
+            ('../', '..'),
+            ('path/..', ''),
+            ('path/../', ''),
+            ('path/../../', '..'),
             ('foo.txt', 'foo.txt'),
             ('some/path////', 'some/path'),
             ('/some/abs/path/', '/some/abs/path'),
@@ -61,6 +83,55 @@ class PathTestCase(unittest.TestCase):
         self.assertEqual('from/bits', t)
         t = Path('from', 'bits/', keep_trailing_slash=False)
         self.assertEqual('from/bits/trail', t.join('trail/'))
+
+    def test_common_prefix_construction(self):
+        tests = (
+            ((), ''),
+            (('', ''), ''),
+            (('/', '/var'), '/'),
+            (('var', 'var'), 'var'),
+            (('var', 'var/'), 'var'),
+            (('/var', '/var'), '/var'),
+            (('/var', '/var/'), '/var'),
+            (('/var/', '/var/'), '/var'),
+            (('/var', 'var'), ''),
+            (('/var', '/varible'), '/'),
+            (('/var/log', 'var/log'), ''),
+            (('/var/log/', '/var/log/kernel'), '/var/log'),
+            (('/var/log', '/var/logged', '/var/log/kernel'), '/var'),
+            )
+        for test, expected in tests:
+            result = Path.common_prefix(test)
+            self.assertEqual(expected, result)
+            self.assertIsInstance(result, Path)
+            if expected:
+                self.assertEqual(expected, Path.common_prefix(*test))
+
+    def test_common_suffix_construction(self):
+        tests = (
+            ((), ''),
+            (('', ''), ''),
+            (('/', '/'), '/'),
+            (('var', 'var'), 'var'),
+            (('var', '/var'), 'var'),
+            (('/var', '/var'), '/var'),
+            (('/var', '/var/'), '/var'),
+            (('/var/', '/var/'), '/var/'),
+            (('bar/log', '/var/log'), '/log'),
+            (('/some/longible', '/varible'), ''),
+            (('/var/log', 'bar/logged'), ''),
+            (('/kernel/log', '/sys/log', '/lady/log'), '/log'),
+            )
+        for test, expected in tests:
+            result = Path.common_suffix(test)
+            self.assertIsInstance(result, Path, test)
+            self.assertEqual(expected, result, test)
+            if expected:
+                self.assertEqual(expected, Path.common_suffix(*test), test)
+
+    def test_cwd_construction(self):
+        self.assertIsInstance(Path.cwd(), Path)
+        self.assertIsInstance(Path.getcwd(), Path)
 
     def test_string_methods(self):
         t = Path('/some/path/file.txt')
@@ -136,6 +207,7 @@ class PathTestCase(unittest.TestCase):
             ('/', ''),
             ('file.txt', 'file.txt'),
             ('/file.txt', 'file.txt'),
+            ('file.txt/', ''),
             ('/path/to/file.txt', 'file.txt'),
             ('path/', ''),  # different than unix basename
             ('/path/trailing', 'trailing'),
@@ -144,24 +216,124 @@ class PathTestCase(unittest.TestCase):
             )
         for test, expected in tests:
             t = Path(test).basename
-            self.assertIsInstance(t, six.string_types)
+            self.assertIsInstance(t, Path, test)
+            self.assertEqual(expected, t, test)
+
+    def test_name(self):
+        tests = (
+            ('', ''),
+            ('/', ''),
+            ('file.txt/', ''),
+            ('file.txt', 'file'),
+            ('/file.txt', 'file'),
+            ('/file.', 'file'),
+            ('/file-1.0.3.txt', 'file-1.0.3'),
+            ('/.secrets', '.secrets'),
+            (' .edgecase_ftw', ' '),
+            ('/file.tar.gz', 'file.tar'),
+            ('/path/to/file.txt', 'file'),
+            ('/path/no_ext', 'no_ext'),
+            ('/stupid/path/with.dots/wazzup?', 'wazzup?'),
+            ('/stupid/path/with spaces.foo', 'with spaces'),
+            )
+        for test, expected in tests:
+            t = Path(test).name
+            self.assertIsInstance(t, Path, test)
+            self.assertEqual(expected, t, test)
+
+    def test_extension(self):
+        tests = (
+            ('', ''),
+            ('/', ''),
+            ('file.txt/', ''),
+            ('file.txt', '.txt'),
+            ('/file.txt', '.txt'),
+            ('/file.', '.'),
+            ('/file-1.0.3.txt', '.txt'),
+            ('/.secrets', ''),
+            (' . edgecase_ftw', '. edgecase_ftw'),
+            ('/file.tar.gz', '.gz'),
+            ('/path/to/file.txt', '.txt'),
+            ('/path/no_ext', ''),
+            ('/stupid/path/with.dots/wazzup?', ''),
+            ('/stupid/path/foo.with spaces', '.with spaces'),
+            )
+        for test, expected in tests:
+            t = Path(test).extension
+            self.assertIsInstance(t, six.string_types, test)
             self.assertEqual(expected, t, test)
 
     def test_dirname(self):
         tests = (
             ('', ''),
             ('/', '/'),
+            ('var', ''),
+            ('var/', 'var/'),
+            ('var/log', 'var/'),
+            ('/some', '/'),
+            ('/some/', '/some/'),
+            ('/some/dir/', '/some/dir/'),
+            ('/some/file.txt', '/some/'),
             ('file.txt', ''),
-            ('/path/to/file.txt', '/path/to'),
-            ('path/', 'path'),
-            ('/path/trailing', '/path'),
-            ('/stupid/path/with.dots/wazzup?', '/stupid/path/with.dots'),
-            ('/path/with spaces/yo', '/path/with spaces'),
+            ('/path/to/file.txt', '/path/to/'),
+            ('path/', 'path/'),
+            ('/path/trailing', '/path/'),
+            ('/stupid/path/with.dots/wazzup?', '/stupid/path/with.dots/'),
+            ('/path/with spaces/yo', '/path/with spaces/'),
             )
         for test, expected in tests:
             t = Path(test).dirname
             self.assertIsInstance(t, Path)
-            self.assertEqual(expected, t)
+            self.assertEqual(expected, t, test)
+
+    def test_parent(self):
+        tests = (
+            ('', ''),
+            ('/', '/'),
+            ('var', ''),
+            ('var/', ''),
+            ('var/log', 'var/'),
+            ('/some', '/'),
+            ('/some/', '/'),
+            ('/some/dir/', '/some/'),
+            ('/some/file.txt', '/some/'),
+            ('file.txt', ''),
+            ('/path/to/file.txt', '/path/to/'),
+            ('path/', ''),
+            ('/path/trailing', '/path/'),
+            ('/stupid/path/with.dots/wazzup?', '/stupid/path/with.dots/'),
+            ('/path/with spaces/yo', '/path/with spaces/'),
+            )
+        for test, expected in tests:
+            t = Path(test).parent
+            self.assertIsInstance(t, Path)
+            self.assertEqual(expected, t, test)
+
+    def test_up(self):
+        tests = (
+            ('', ''),
+            ('/', '/'),
+            ('var', ''),
+            ('var/', ''),
+            ('var/log', 'var/'),
+            ('/some', '/'),
+            ('/some/', '/'),
+            ('/some/dir/', '/some/'),
+            ('/some/file.txt', '/some/'),
+            ('file.txt', ''),
+            ('/path/to/file.txt', '/path/to/'),
+            ('path/', ''),
+            ('/path/trailing', '/path/'),
+            ('/stupid/path/with.dots/wazzup?', '/stupid/path/with.dots/'),
+            ('/path/with spaces/yo', '/path/with spaces/'),
+                )
+        for test, expected in tests:
+            t = Path(test).up()
+            self.assertIsInstance(t, Path)
+            self.assertEqual(expected, t, test)
+        self.assertEqual('/', Path('/foo/bar').up(2))
+        self.assertEqual('', Path('foo/bar').up(8))
+        self.assertIsInstance(Path('/').up(8), Path)
 
     def test_exists(self):
         t = Path('/tmp')
@@ -182,12 +354,12 @@ class PathTestCase(unittest.TestCase):
                 )
         for path in abs:
             t = Path(path)
-            self.assertTrue(t.isabs)
-            self.assertFalse(t.isrelative)
+            self.assertTrue(t.is_abs)
+            self.assertFalse(t.is_relative)
         for path in relative:
             t = Path(path)
-            self.assertFalse(t.isabsolute)
-            self.assertTrue(t.isrelative)
+            self.assertFalse(t.is_absolute)
+            self.assertTrue(t.is_relative)
 
     def test_isdir(self):
         self.assertTrue(Path('/tmp').isdir)
@@ -286,13 +458,130 @@ class PathTestCase(unittest.TestCase):
     def test_split(self):
         # testing that Python's string.split works, just that os.sep is default
         # rather than whitespace.
-        expected = ['/', 'some', ' path', ' ', 'awesome.txt']
-        self.assertSequenceEqual(expected, Path('/some/ path/ /awesome.txt').split())
+        tests = (
+            ('', []),
+            ('  ', ['  ', ]),
+            ('/', ['/', ]),
+            (' /', [' ', ]),
+            (' /  ', [' ', '  ']),
+            ('/var', ['/', 'var']),
+            ('var', ['var', ]),
+            ('var/', ['var', ]),
+            ('var/foo', ['var', 'foo']),
+            ('/some/ path/ /awesome.txt', ['/', 'some', ' path', ' ', 'awesome.txt']),
+            # remember these are normalized Path
+            #('../', ['..', ]),
+            #('/..', ['/', '..', ]),
+            #('/var/../', ['/', 'var', '..', ]),
+            #('/..var/..', ['/', '..var', '..']),
+            ('//', ['/', ]),
+            ('/var//log/', ['/', 'var', 'log']),
+            ('//var//log/', ['/', 'var', 'log']),
+            (r'\wrong\way', ['\wrong\way', ]),
+            )
+        for test, expected in tests:
+            result = Path(test).split()
+            for p in result:
+                self.assertIsInstance(p, Path, test)
+            self.assertSequenceEqual(expected, result, test)
+        # non os.sep split
+        self.assertSequenceEqual(('/var', 'd', '/bar'), Path('/var%d%/bar').split('%'))
+        # TODO: rsplit, maxsplit
+
+    def test_split_path(self):
+        tests = (
+            '',
+            '  ',
+            '/',
+            ' /',
+            ' /  ',
+            '/var',
+            'var',
+            'var/',
+            'var/foo',
+            '/some/ path/ /awesome.txt',
+            )
+        for test in tests:
+            result = Path(test).split_path()
+            expected = os.path.split(test)
+            for p in result:
+                self.assertIsInstance(p, Path, test)
+            self.assertSequenceEqual(expected, result, test)
+
+    def test_split_drive(self):
+        tests = (
+            (''),
+            ('/'),
+            ('/bob'),
+            ('c:/bob'),
+            (r'c:\bob'),
+            )
+        for test in tests:
+            result = Path(test).split_drive()
+            expected = os.path.splitdrive(test)
+            for p in result:
+                self.assertIsInstance(p, Path, test)
+            self.assertSequenceEqual(expected, result, test)
+
+    def test_split_extension(self):
+        tests = (
+            '',
+            '/',
+            'file.txt/',
+            'file.txt',
+            '/file.txt',
+            '/file.',
+            '/file-1.0.3.txt',
+            '/.secrets',
+            ' . edgecase_ftw',
+            '/file.tar.gz',
+            '/path/to/file.txt',
+            '/path/no_ext',
+            '/stupid/path/with.dots/wazzup?',
+            '/stupid/path/foo.with spaces',
+            )
+        for test in tests:
+            result = Path(test).split_extension()
+            expected = os.path.splitext(test)
+            self.assertIsInstance(result[0], Path, test)
+            self.assertIsInstance(result[1], six.string_types, test)
+            self.assertSequenceEqual(expected, result, test)
+
+    def test_strip_extension(self):
+        tests = (
+            ('', None, ''),
+            ('/', None, '/'),
+            ('file.txt/', None, 'file.txt/'),
+            ('file.txt', None, 'file'),
+            ('/file.txt', None, '/file'),
+            ('/file.', None, '/file'),
+            ('/file-1.0.3.txt', None, '/file-1.0.3'),
+            ('/.secrets', None, '/.secrets'),
+            (' . edgecase_ftw', None, ' '),
+            ('/file.tar.gz', None, '/file.tar'),
+            ('/file.tar.gz', ('.gz',), '/file.tar'),
+            ('/file.tar.gz', ('.tar.gz',), '/file'),
+            ('/file.tar.gz.haha', ('.tar.gz',), '/file.tar.gz.haha'),
+            ('/file.tar.gz', (), '/file.tar.gz'),
+            ('/file.tar.gz', ('tar',), '/file.tar.gz'),
+            ('/file.tar.gz', ('gz',), '/file.tar.'),
+            ('/file.tar.gz', ('ar.gz',), '/file.t'),
+            )
+        for test, match, expected in tests:
+            result = Path(test).strip_extension(match)
+            self.assertIsInstance(result, Path, (test, match))
+            self.assertSequenceEqual(expected, result, (test, match))
 
     def test_join(self):
         tests = (
             (('', ''), ''),
             (('/', ''), '/'),
+            (('path', '/'), 'path/'),
+            (('path', '..'), ''),
+            (('path', '../'), ''),
+            (('path', '/..'), ''),
+            (('path', '/../..'), '..'),
+            (('path', '..', 'booyah'), 'booyah'),
             (('', '/4', '/me/'), '/4/me/'),
             (('', 'yo', 'como'), 'yo/como'),
             ((Path(''), '', '/4', Path(''), '/me/', ''), '/4/me/'),
@@ -309,23 +598,34 @@ class PathTestCase(unittest.TestCase):
             )
         for bits, expected in tests:
             t = Path(bits[0]).join(*bits[1:])
-            self.assertEqual(expected, t)
+            self.assertEqual(expected, t, bits)
         # test div operator which calls self.join
         t = Path('/foo/bar')
         self.assertEqual('/foo/car', t / '../car')
 
-    @unittest.skip('TODO:')
+    def test_abspath(self):
+        t = Path('/foo/bar')
+        self.assertIsInstance(t.abspath(), Path)
+
+    def test_normcase(self):
+        t = Path('/foo/bar')
+        self.assertIsInstance(t.normcase(), Path)
+
+    def test_normpath(self):
+        t = Path('/foo/bar')
+        self.assertIsInstance(t.normpath(), Path)
+
+    def test_realpath(self):
+        t = Path('/foo/bar')
+        self.assertIsInstance(t.realpath(), Path)
+
     def test_expand(self):
-        pass
+        t = Path('/foo/bar')
+        self.assertIsInstance(t.expand(), Path)
 
     def test_glob(self):
         t = Path('/foo/bar')
-        self.assertEqual([], t.glob('*'))
-
-    def test_up(self):
-        self.assertEqual('/foo/', Path('/foo/bar').up())
-        self.assertEqual('/', Path('/foo/bar').up(2))
-        self.assertEqual('/', Path('/foo/bar').up(8))
+        self.assertEqual([], list(t.glob('*')))
 
     def test_walk_iter(self):
         t = Path('/etc/passwd')

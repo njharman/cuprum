@@ -1,3 +1,9 @@
+0.1.0
+=====
+Backwards incompatible changes.  Added bunch of ideas from
+http://pypi.python.org/pypi/path.py
+Working towards spliting path into it's own module.
+
 0.0.1
 =====
 

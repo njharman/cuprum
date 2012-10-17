@@ -19,11 +19,13 @@ log = logging.getLogger('cu.path')
 # log.info operations that change filesystem, otherwise quiet
 
 import six
+from six.moves import reduce
 
 # TODO:
-# path.realpath
 # path.relpath
-# path.samefile
+
+
+from os.path import commonprefix, sameopenfile, samestat
 
 
 class Path(object):
@@ -36,52 +38,161 @@ class Path(object):
       - Trailing slash are preserved, multiple are collapsed.
       - Can chain
 
-    ::
+    Constructors:
 
-      root = Path('/')
-      log = Path('/', 'var', 'log')
+      - Path('/') or Path('/', 'var', 'log') or Path(iterable)
+      - Path.cwd()
+      - Path.common_prefix('/var', Path('/var/log/')) or Path.common_prefix(iterable)
+      - Path.common_suffix('/usr/bin', Path('/bin')) or Path.common_suffix(iterable)
 
-    Class attributes
+    Read-only attributes:
+
+      - size: os.path.getsize()
+      - atime: os.path.getatime()
+      - ctime: os.path.getctime()
+      - mtime: os.path.getmtime()
+      - abs:  Absolute version of this path (relative to cwd if necessary)
+      - basename: os.path.basename()
+      - dirname: like os.path.dirname but respects ``keep_trailing_slash`` value.
+      - exists: os.path.exists()
+      - isabs: os.path.isabs()
+      - isabsolute: alias of isabs
+      - isrelative: not isabs
+      - isdir: os.path.isdir()
+      - isfile: os.path.isfile()
+      - islink: os.path.islink()
+      - ismount: os.path.ismount()
       - sep: os.path.sep
       - unicode: os.path.supports_unicode_filenames
+
+    Read-write attributes:
+
+      - owner: get / set owner of leaf component
+      - group: get / set group of leaf component
+      - mode: get / set permissions of leaf component
+
     '''
     sep = os.path.sep
     unicode = os.path.supports_unicode_filenames
+    _str = unicode if os.path.supports_unicode_filenames else str
 
     @classmethod
-    def commonprefix(cls, paths):
-        '''os.path.commonprefix classmethod'''
-        return os.path.commonprefix(str(p) for p in paths)
+    def common_prefix(cls, paths, *bits):
+        '''Unlike os.path.commonprefix this compares by path segment.
+        '/var/boo, /var/bog returns /var  not /var/bo
+        :parameters: One iterable of string and Path instances.
+                    Or, two or more string and Path instances.
+        :return: new Path()
+        '''
+        # Support single iterable or bunch of parameters
+        if bits:
+            paths = (paths, ) + tuple(bits)
+        prefix = list()
+        # Path.split keeps leading slash, booyah!
+        for segments in zip(*(Path(p).split() for p in paths)):
+            # All segments equal?
+            if not reduce(lambda a, b: a == b and a, segments):
+                break
+            prefix.append(segments[0])
+        if prefix:
+            return Path(*prefix)
+        else:
+            return Path('')
+
+    @classmethod
+    def common_suffix(cls, paths, *bits):
+        '''Compares by path segment. Trailing slash ignored for comparison.
+        :parameters: One iterable of string and Path instances.
+                    Or, two or more string and Path instances.
+        :return: new Path()
+        '''
+        def with_slash(path):
+            bits = Path(path).split()
+            if bits:
+                bits.reverse()
+                for p in bits[:-1]:
+                    yield p
+                    yield cls.sep
+                yield bits[-1]
+        if bits:
+            paths = (paths, ) + tuple(bits)
+        suffix = list()
+        for segments in zip(*(with_slash(p) for p in paths)):
+            if not reduce(lambda a, b: a == b and a, segments):
+                break
+            suffix.append(segments[0])
+        if suffix:
+            suffix.reverse()
+            # Replace trailing slash if all original paths had one.
+            if all(p.endswith(cls.sep) for p in paths):
+                suffix.append(cls.sep)
+            return Path(*suffix)
+        else:
+            return Path('')
+
+    @classmethod
+    def cwd(cls):
+        '''Current working directory as Path instance.'''
+        if os.path.supports_unicode_filenames:
+            return cls(os.getcwdu())
+        else:
+            return cls(os.getcwd())
+
+    getcwd = cwd
+
+    def __enter__(self):
+        '''Context manager.'''
+        self.__previous_directory = os.getcwd()
+        self.chdir(self._path)
+
+    def __exit__(self):
+        '''Context manager.'''
+        self.chdir(self.__previous_directory)
 
     def __init__(self, path, *bits, **kwargs):
-        '''
+        '''Initialize Path from string/unicode, Path, iterator of those, multiple parameters of those
         :param keep_trailing_slash: [True] if True any trailing slashes will be preserved
-        :param expand: [True] if True expand() called.
+        :param expand: [True] if True self.expand() called.
         '''
         self._kts = kwargs.get('keep_trailing_slash', True)
         self.__init_path__(path, *bits)
 
     def __init_path__(self, path, *bits):
         if not isinstance(path, Path):
-            trailing_slash = path.endswith(self.sep) and self._kts
-            if path:  # don't let normpath turn '' into '.'
-                path = os.path.normcase(os.path.normpath(path))
+            # normpath strips trailing '/', unless path == '/'. DO NOT WANT!
+            # But, paths like 'path/..' and 'path/../' should eval to '', not '/', not '.'.
+            slasher = path.endswith(self.sep) and self._kts
+            # normpath turns '' and 'var/..' into '.'. Do not want!
+            # But, want ability to create paths like '.' or './file.txt'.
+            # So, if user passes, good. Otherwise unfuck normpath's fuckedupness.
+            preserve = path == '.'
+            path = os.path.normcase(os.path.normpath(path))
+            if path == '.' and not preserve:
+                path = ''
             # put back trailing slash normpath strips, but not if path reduced to '/'
-            if trailing_slash and path != self.sep:
+            elif slasher and path != self.sep:
                 path += self.sep
-        self._path = str(path)
+        self._path = self._str(path)
         if bits:
-            # kind of lame
+            # TODO: kind of lame
             self._path = self.join(*bits)._path
-
-    def __str__(self):
-        return self._path
 
     def __repr__(self):
         return '<%s(\'%s\')>' % (self.__class__.__name__, self._path)
 
+    def __str__(self):
+        return self._path
+
+    def __unicode__(self):
+        # Note: Don't be a fascist, maybe user isn't actually doing anything
+        # with *this* filesystem.
+        #if not self.unicode:
+        #    raise ValueError('Unicode paths are not supported by filesystem.')
+        return unicode(self._path)
+
     def __getitem__(self, *args, **kwargs):
-        return self.__class__(self._path.__getitem__(*args, **kwargs), keep_trailing_slash=self._kts)
+        '''String indexing'''
+        return self._pathize(self._path.__getitem__(*args, **kwargs))
 
     def __len__(self):
         return len(self._path)
@@ -91,7 +202,7 @@ class Path(object):
         return iter(self.list())
 
     def __floordiv__(self, expr):
-        '''Returns a (possibly empty) list of paths that matched the glob-pattern under this path.'''
+        '''Returns a (possibly empty) list of paths that matched glob-pattern under this path.'''
         return self.glob(expr)
 
     def __div__(self, other):
@@ -105,7 +216,7 @@ class Path(object):
         if isinstance(other, Path):
             other = other._path
         elif not isinstance(other, six.string_types):
-            other = str(other)
+            other = self._str(other)
         return os.path.normcase(self._path) == os.path.normcase(other)
 
     def __cmp__(self, other):
@@ -118,7 +229,7 @@ class Path(object):
         return self._path != ''
 
     def _pathize(self, result):
-        '''Dynamically modify returns of string funcs into Path instances.'''
+        '''Dynamically modify return values of methods into Path instances.'''
         if isinstance(result, six.string_types):
             return self.__class__(result, keep_trailing_slash=self._kts)
         elif isinstance(result, list):
@@ -129,9 +240,60 @@ class Path(object):
             return result
 
     @property
+    def dirname(self):
+        '''Dirname of this path, everything before final self.sep.
+        Contrast with `parent` and `up`.
+        Note: how this interacts with keep_trailing_slash=False.
+        See `parent` for something more like os.path.dirname
+        If path ends in self.sep dirname == path.
+        If path has no self.sep, dirname == ''.
+        :return: new Path()
+        '''
+        if self._path == '' or self._path.endswith(self.sep):
+            path = self._path
+        else:
+            path = os.path.dirname(self._path)
+            if path and path != '/' and self._kts:
+                path += self.sep
+        return self._pathize(path)
+
+    path = dirname  # better name
+
+    @property
+    def basename(self):
+        '''Basename of this path, everything after final self.sep.
+        Note: how this interacts with keep_trailing_slash=False.
+        If path ends in self.sep basename is '', which is different than *nix basename.
+        :return: new Path()
+        '''
+        return self._pathize(os.path.basename(self._path))
+
+    filename = basename   # bettername
+
+    @property
+    def name(self):
+        '''Name of this path, everything before and excluding the rightmost '.' of basename.
+        If path ends in self.sep, return ''.
+        :return: new Path()
+        '''
+        base, ext = os.path.splitext(self.basename)
+        return self._pathize(base)
+
+    @property
+    def extension(self):
+        '''Extension of this path, everything after and including the rightmost '.' of basename.
+        If path ends in self.sep, return ''.
+        If basename has no '.', return ''.
+        If basename starts with '.', return ''.
+        :return: text
+        '''
+        base, ext = os.path.splitext(self.basename)
+        return self._str(ext)
+
+    @property
     def abs(self):
-        '''Absolute version of this path, using cwd if necessary.
-        '' is returned as '' not cwd.
+        '''Absolute version of this path, using cwd for relative paths.
+        Unlike os.abspath, '' is returned as '' not '.'
         :return: new Path()
         '''
         if self.startswith(self.sep):
@@ -141,85 +303,113 @@ class Path(object):
         else:
             bits = (os.getcwd(), self)
         # This garbage is cause keyword after *args is syntax error in Python 2.5
-        lame = self.__class__('', keep_trailing_slash=self._kts)
+        lame = self._pathize('')
         lame.__init_path__(*bits)
         return lame
 
     @property
-    def basename(self):
-        '''The basename component (everything after final slash) of this path.
-        If path ends in slash basename is '', different than unix basename.
-        :return: str
-        '''
-        return os.path.basename(self._path)
-
-    @property
-    def dirname(self):
-        '''The dirname component (everything before final slash) of this path.
-        If path ends in slash dirname == path.
+    def parent(self):
+        '''Parent directory of this path.
+        Contrast with `dirname` and `up`.
+        Parent of file is the directory it is in.
+        Parent of '/' is  '/', of '' is ''.
+        Relative paths will (eventually) return ''.
         :return: new Path()
         '''
-        return self.__class__(os.path.dirname(self._path), keep_trailing_slash=self._kts)
+        if self._path:
+            return self.join('../')
+        else:
+            return self._pathize('')
+
+    def up(self, count=1):
+        '''"Up" ``count`` parent directories from this path.
+        Contrast with `dirname` and `parent`.
+        Up from '/' is '/', from '' or 'relative_path' is ''.
+        :param count: [1] number of path segments to go up.
+        :return: new Path()
+        '''
+        if count <= 0:
+            return self._pathize(self._path)
+        bits = self.split()[:-count]
+        if bits:
+            if self._kts:
+                bits.append(self.sep)
+            return self.__class__(*bits, keep_trailing_slash=self._kts)
+        elif self.is_absolute:
+            return self._pathize(self.sep)
+        else:
+            return self._pathize('')
 
     @property
     def exists(self):
-        '''Does this path exists and is not a broken link.'''
+        '''True if this path exist and is not a broken link.'''
         return os.path.exists(self._path)
 
-    @property
-    def isabs(self):
-        '''Is this path is absolute.'''
-        return os.path.isabs(self._path)
+    isreal = exists
+    is_real = exists
 
     @property
-    def isabsolute(self):
-        '''Is this path is absolute.'''
+    def is_abs(self):
+        '''True if this path is absolute, starts with self.sep.'''
         return os.path.isabs(self._path)
 
+    isabs = is_abs
+    is_absolute = is_abs
+
     @property
-    def isrelative(self):
-        '''Is this path is relative.'''
+    def is_relative(self):
+        '''True if this path is relative, does not start with self.sep.'''
         return not os.path.isabs(self._path)
 
+    isrelative = is_relative
+
     @property
-    def isdir(self):
-        '''Is this path is a directory.'''
+    def is_dir(self):
+        '''True if this path is a directory.'''
         return os.path.isdir(self._path)
 
+    isdir = is_dir
+
     @property
-    def isfile(self):
-        '''Is this path is a regular file.'''
+    def is_file(self):
+        '''True if this path is a regular file.'''
         return os.path.isfile(self._path)
 
+    isfile = is_file
+
     @property
-    def islink(self):
-        '''Is this path is a symbolic link.'''
+    def is_link(self):
+        '''True if this path is a symbolic link.'''
         return os.path.islink(self._path)
 
+    islink = is_link
+
     @property
-    def ismount(self):
-        '''Is this path is a mount point.'''
+    def is_mount(self):
+        '''True if this path is a mount point.'''
         return os.path.ismount(self._path)
 
-    @property
-    def atime(self):
-        '''Access time of leaf component of this path.'''
-        return os.path.getatime(self._path)
-
-    @property
-    def mtime(self):
-        '''Modified time of leaf component of this path.'''
-        return os.path.getmtime(self._path)
-
-    @property
-    def ctime(self):
-        '''Change/creattion(win32) time of leaf component of this path.'''
-        return os.path.getctime(self._path)
+    ismount = is_mount
 
     @property
     def size(self):
         '''Size in bytes of leaf component of this path.'''
-        return os.path.getsize(self._path)
+        return os.stat(self._path).st_size
+
+    @property
+    def atime(self):
+        '''Access time of leaf component of this path.'''
+        return os.stat(self._path).st_atime
+
+    @property
+    def mtime(self):
+        '''Modified time of leaf component of this path.'''
+        return os.stat(self._path).st_mtime
+
+    @property
+    def ctime(self):
+        '''Change/creation(win32) time of leaf component of this path.'''
+        return os.stat(self._path).st_ctime
 
     def _get_owner(self):
         stat = self.stat()
@@ -231,7 +421,7 @@ class Path(object):
         log.info('Owner %s set on %s' % (owner, self._path))
         self.chown(owner)
 
-    owner = property(_get_owner, _set_owner, doc='owner of leaf component of this path.')
+    owner = property(_get_owner, _set_owner, doc='Owner of leaf component of this path.')
 
     def _get_group(self):
         stat = self.stat()
@@ -240,16 +430,22 @@ class Path(object):
     def _set_group(self, group):
         self.chown(group=group)
 
-    group = property(_get_group, _set_group, doc='group of leaf component of this path.')
+    group = property(_get_group, _set_group, doc='Group of leaf component of this path.')
 
     def _get_mode(self):
         stat = self.stat()
-        return stat.st_mode # TODO: translate this into something that makes sense
+        return stat.st_mode  # TODO: translate this into something that makes sense
 
     def _set_mode(self, flags):
         self.chmod(flags)
 
-    mode = property(_get_mode, _set_mode, doc='file mode of leaf component of this path.')
+    mode = property(_get_mode, _set_mode, doc='Mode of leaf component of this path.')
+
+    def same_file(self, path):
+        '''os.path.samefile'''
+        return os.path.realpath(self._path, path)
+
+    samefile = same_file  # what os.path calls it
 
     def stat(self, followlinks=True):
         '''Same as os.stat(self).
@@ -266,53 +462,87 @@ class Path(object):
 
     statvfs = statfs
 
-    def split(self, sep=None):
-        '''Split on self.sep by default.
-        Include leading os.sep. Remove any final ''.
-        For os.path.split behavior see split_path
-        '''
+    def _split(self, sep, maxsplit, func):
         if sep is None:
             sep = self.sep
-        bits = self._path.split(sep)
+        if not self._path:
+            return ()
+        bits = func(sep, maxsplit)
         if bits[0] == '':
-            bits[0] = os.sep
-        return self._pathize(bits)
+            bits[0] = self.sep
+        return self._pathize([b for b in bits if b])
 
-    def split_drive(self):
-        '''os.path.splitdrive on this path.
-        :return: (drive, tail)
+    def rsplit(self, sep=None, maxsplit=-1):
+        '''Right split on self.sep by default.
+        Include leading self.sep. Remove all '' path components.
+        For os.path.split behavior see split_path.
+        :param sep: [self.sep]
+        :param maxsplit: [unlimited]
+        :return: list of Path() instances
         '''
-        return self._pathize(os.path.splitdrive(self._path))
+        return self._split(sep, maxsplit, self._path.rsplit)
 
-    splitdrive = split_drive  # what it is called in os.path module
-
-    def split_extension(self):
-        '''os.path.splitext on this path.
-        :return: (root, extension)
+    def split(self, sep=None, maxsplit=-1):
+        '''Split on self.sep by default.
+        Include leading self.sep. Remove all '' path components.
+        For os.path.split behavior see split_path.
+        :param sep: [self.sep]
+        :param maxsplit: [unlimited]
+        :return: list of Path() instances
         '''
-        return self._pathize(os.path.splitdrive(self._path))
-
-    splitext = split_extension  # what it is called in os.path module
-    split_ext = split_extension
+        return self._split(sep, maxsplit, self._path.split)
 
     def split_path(self):
         '''os.path.split on this path.
-        :return: (root, tail)
+        :return: (Path(root), Path(tail))
         '''
         return self._pathize(os.path.split(self._path))
 
-    splitpath = split_path  # for api consistancy
+    splitpath = split_path  # api consistancy
 
-    def split_unc(self):
+    def split_drive(self):
         '''os.path.splitdrive on this path.
-        :return: (unc, rest)
+        :return: (Path(drive), Path(tail))
         '''
-        return self._pathize(os.path.splitunc(self._path))
+        return self._pathize(os.path.splitdrive(self._path))
 
-    splitunc = split_unc  # what it is called in os.path module
+    splitdrive = split_drive  # what os.path names it
+
+    def split_extension(self):
+        '''os.path.splitext on this path.
+        :return: (Path(root), extension)
+        '''
+        base, ext = os.path.splitext(self._path)
+        return (self._pathize(base), ext)
+
+    splitext = split_extension  # what os.path names it
+
+    def strip_extension(self, match=None):
+        '''Strip one extension, return rest.
+        If no extensions return entire path.
+        Note: Can't tell difference between file with dots and real extension.
+        :param match: list of extensions (with or without '.') to strip, others ignored.
+        :return: new Path()
+        '''
+        if match is None:
+            return self.split_extension()[0]
+        else:
+            for m in match:
+                if self._path.endswith(m):
+                    return self._pathize(self._path[:-len(m)])
+        return self._pathize(self._path)
+
+    if hasattr(os.path, 'splitunc'):
+        def split_unc(self):
+            '''os.path.splitunc on this path.
+            :return: (Path(unc), Path(unc))
+            '''
+            return self._pathize(os.path.splitunc(self._path))
+
+        splitunc = split_unc  # what os.path names it
 
     def join(self, *bits):
-        '''join self with any number of path bits.
+        '''Join self with any number of path bits.
         For os.path.join behavior see join_path.
         :return: new Path()
         '''
@@ -329,35 +559,54 @@ class Path(object):
             tail = good_bits[1:]
         else:
             return self.__class__('', keep_trailing_slash=self._kts)
-        proper_bits = head + [str(b.lstrip(self.sep)) for b in tail]
-        return self.__class__(os.path.join(*proper_bits), keep_trailing_slash=self._kts)
+        proper_bits = head + [self._str(b.lstrip(self.sep)) for b in tail]
+        return self._pathize(os.path.join(*proper_bits))
 
     def join_path(self, *bits):
         '''os.path.join
         :return: new Path()
         '''
-        return self.__class__(os.path.join(*bits), keep_trailing_slash=self._kts)
+        return self._pathize(os.path.join(*bits))
 
     joinpath = join_path  # api consistancy
+
+    def abspath(self):
+        '''os.path.abspath'''
+        return self._pathize(os.path.abspath(self._path))
+
+    def realpath(self):
+        '''os.path.realpath'''
+        return self._pathize(os.path.realpath(self._path))
+
+    def normpath(self):
+        '''All Path instances are normalized on construction, os.path.normpath'''
+        return self._pathize(os.path.normpath(self._path))
+
+    def normcase(self):
+        '''All Path instances are normalized on construction, os.path.normcase'''
+        return self._pathize(os.path.normcase(self._path))
 
     def expand(self):
         '''Expands any environment variables and home shortcuts in path
         (like ``os.path.expanduser`` after ``os.path.expandvars``)
-        :returns: expanded string
+        :returns: new expanded Path()
         '''
-        return self.__class__(os.path.expanduser(os.path.expandvars(self._path)), keep_trailing_slash=self._kts)
+        return self._pathize(os.path.expanduser(os.path.expandvars(self._path)))
+
+    def expanduser(self):
+        '''Probably wanna use `expand` os.path.expanduser.'''
+        return self._pathize(os.path.expanduser(self._path))
+
+    def expandvars(self):
+        '''Probably wanna use `expand` os.path.expandvars.'''
+        return self._pathize(os.path.expandvars(self._path))
 
     def glob(self, pattern):
         '''Expand pattern as glob.glob rooted at this path.
-        :return: (possibly empty) list of Path()s matching glob
+        :return: (possibly empty) generator of Path()s matching glob
         '''
-        return [self.__class__(path, keep_trailing_slash=self._kts) for path in glob.glob(str(self / pattern))]
-
-    def up(self, count=1):
-        '''Go up in ``count`` directories (the default is 1).
-        :return: new Path()
-        '''
-        return self.join('../' * count)
+        for path in glob.glob(self._str(self / pattern)):
+            yield self._pathize(path)
 
     def walk(self, topdown=True, onerror=None, followlinks=False):
         '''os.walk, a generator.
@@ -410,11 +659,11 @@ class Path(object):
             Path(link).delete()
         if symbolic:
             log.info('Symlink to %s' % (self._path, ))
-            os.symlink(self._path, str(link))
+            os.symlink(self._path, self._str(link))
         else:
             log.info('Hardlink to %s' % (self._path, ))
-            os.link(self._path, str(link))
-        return self.__class__(link, keep_trailing_slash=self._kts)
+            os.link(self._path, self._str(link))
+        return self._pathize(link)
 
     def hardlink(self, link, force=False):
         '''Create hard link to this path.
@@ -455,7 +704,7 @@ class Path(object):
         :parm symlinks: [False] passed to shutil.copytree
         :return: new Path(dest)
         '''
-        dest = self.__class__(dest, keep_trailing_slash=self._kts)
+        dest = self._pathize(dest)
         if force:
             dest.delete()
         log.info('Copy to %s' % (self._path, ))
@@ -470,7 +719,7 @@ class Path(object):
         :param force: delete any existing dest.
         :return: new Path(dest)
         '''
-        dest = self.__class__(dest, keep_trailing_slash=self._kts)
+        dest = self._pathize(dest)
         if force:
             dest.delete()
         log.info('Move to %s' % (self._path, ))
@@ -503,7 +752,7 @@ class Path(object):
     cp = copy
     mv = move
     rm = delete
-    remove = delete # and one just cause
+    remove = delete  # and one just cause
 
     def fifo(self, mode=666):
         '''os.mkfifo
@@ -609,18 +858,6 @@ class Path(object):
         local['chmod'](*args)
         return self
 
-    @contextlib.contextmanager
-    def __call__(self):
-        '''Context manager ``chdir`` into self and back to the original
-        directory; much like ``pushd``/``popd``.
-        '''
-        prev = os.getcwd()
-        self.chdir()
-        try:
-            yield
-        finally:
-            self.chdir(prev)
-
 
 # Facade str methods.
 for attr in dir(str):
@@ -662,8 +899,8 @@ class CWD(Path):
         :param directory: The destination director (a string or a ``Path``)
         '''
         previous = self._path
-        self.chdir(directory)
         try:
+            self.chdir(directory)
             yield
         finally:
             self.chdir(previous)

@@ -2,8 +2,8 @@ Cuprum
 ======
 Awesome path/file operations and "subprocess for `Unix Daddy`_'s".
 
-A fork of Plumbum_ with bits of PBS_ and anything else that is within the
-goals_.
+A fork of Plumbum_ with bits of PBS_ (sh.py), path.py_ and anything else that
+is within the goals_.
 
 Python path/file operations are strewn about the standard library.
 Cuprum pulls all these into ``Path`` class, makes existing functionality
@@ -75,6 +75,7 @@ Tested against the following Python Versions using `Travis CI`_:
 .. _unix daddy: http://tomayko.com/writings/that-dilbert-cartoon
 .. _plumbum: https://github.com/tomerfiliba/plumbum
 .. _pbs: https://github.com/amoffat/pbs/
+.. _path.py: http://pypi.python.org/pypi/path.py
 .. _six: http://packages.python.org/six/
 .. _pep8: http://pypi.python.org/pypi/pep8/
 .. _unittest2: http://pypi.python.org/pypi/unittest2/
