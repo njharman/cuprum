@@ -338,12 +338,11 @@ class Path(object):
             lame = self._pathize('')
             lame.__init_path__(*bits)
             return lame
-        elif self.is_absolute:
+        elif self.is_absolute():
             return self._pathize(self.sep)
         else:
             return self._pathize('')
 
-    @property
     def exists(self):
         '''True if this path exist and is not a broken link.'''
         return os.path.exists(self._path)
@@ -351,7 +350,6 @@ class Path(object):
     isreal = exists
     is_real = exists
 
-    @property
     def is_abs(self):
         '''True if this path is absolute, starts with self.sep.'''
         return os.path.isabs(self._path)
@@ -359,57 +357,48 @@ class Path(object):
     isabs = is_abs
     is_absolute = is_abs
 
-    @property
     def is_relative(self):
         '''True if this path is relative, does not start with self.sep.'''
         return not os.path.isabs(self._path)
 
     isrelative = is_relative
 
-    @property
     def is_dir(self):
         '''True if this path is a directory.'''
         return os.path.isdir(self._path)
 
     isdir = is_dir
 
-    @property
     def is_file(self):
         '''True if this path is a regular file.'''
         return os.path.isfile(self._path)
 
     isfile = is_file
 
-    @property
     def is_link(self):
         '''True if this path is a symbolic link.'''
         return os.path.islink(self._path)
 
     islink = is_link
 
-    @property
     def is_mount(self):
         '''True if this path is a mount point.'''
         return os.path.ismount(self._path)
 
     ismount = is_mount
 
-    @property
     def size(self):
         '''Size in bytes of leaf component of this path.'''
         return os.stat(self._path).st_size
 
-    @property
     def atime(self):
         '''Access time of leaf component of this path.'''
         return os.stat(self._path).st_atime
 
-    @property
     def mtime(self):
         '''Modified time of leaf component of this path.'''
         return os.stat(self._path).st_mtime
 
-    @property
     def ctime(self):
         '''Change/creation(win32) time of leaf component of this path.'''
         return os.stat(self._path).st_ctime
@@ -687,7 +676,7 @@ class Path(object):
         '''Listing of entries in this path.
         If this path represents file only it returnedk.
         :return: list of Path()s'''
-        if self.isfile:
+        if self.isfile():
             return [self, ]
         return [self / file for file in os.listdir(self._path)]
 
@@ -711,7 +700,7 @@ class Path(object):
         if force:
             dest.delete()
         log.info('Copy to %s' % (self._path, ))
-        if self.isdir:
+        if self.isdir():
             shutil.copytree(self._path, dest, symlinks)
         else:
             shutil.copy2(self._path, dest)
@@ -742,7 +731,7 @@ class Path(object):
         '''
         if self.exists:
             log.info('Delete %s' % (self._path, ))
-            if self.isdir:
+            if self.isdir():
                 shutil.rmtree(self._path)
             else:
                 os.remove(self._path)

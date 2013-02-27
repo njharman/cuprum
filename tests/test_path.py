@@ -337,11 +337,11 @@ class PathTestCase(unittest.TestCase):
 
     def test_exists(self):
         t = Path('/tmp')
-        self.assertTrue(t.exists)
+        self.assertTrue(t.exists())
         t = Path('/etc/passwd')
-        self.assertTrue(t.exists)
+        self.assertTrue(t.exists())
         t = Path('/I/like/oatmeal/cookies')
-        self.assertFalse(t.exists)
+        self.assertFalse(t.exists())
 
     def test_isabs(self):
         abs = (
@@ -354,29 +354,29 @@ class PathTestCase(unittest.TestCase):
                 )
         for path in abs:
             t = Path(path)
-            self.assertTrue(t.is_abs)
-            self.assertFalse(t.is_relative)
+            self.assertTrue(t.is_abs())
+            self.assertFalse(t.is_relative())
         for path in relative:
             t = Path(path)
-            self.assertFalse(t.is_absolute)
-            self.assertTrue(t.is_relative)
+            self.assertFalse(t.is_absolute())
+            self.assertTrue(t.is_relative())
 
     def test_isdir(self):
-        self.assertTrue(Path('/tmp').isdir)
-        self.assertFalse(Path('/etc/passwd').isdir)
+        self.assertTrue(Path('/tmp').isdir())
+        self.assertFalse(Path('/etc/passwd').isdir())
 
     def test_isfile(self):
-        self.assertFalse(Path('/tmp').isfile)
-        self.assertTrue(Path('/etc/passwd').isfile)
+        self.assertFalse(Path('/tmp').isfile())
+        self.assertTrue(Path('/etc/passwd').isfile())
 
     def test_islink(self):
-        self.assertFalse(Path('/tmp').islink)
-        self.assertFalse(Path('/etc/passwd').islink)
+        self.assertFalse(Path('/tmp').islink())
+        self.assertFalse(Path('/etc/passwd').islink())
         #TODO: test actual link
 
     def test_ismount(self):
-        self.assertTrue(Path('/proc').ismount)
-        self.assertFalse(Path('/etc/passwd').ismount)
+        self.assertTrue(Path('/proc').ismount())
+        self.assertFalse(Path('/etc/passwd').ismount())
 
     def test_times(self):
         t = Path('/tmp')
@@ -595,6 +595,8 @@ class PathTestCase(unittest.TestCase):
             (('path/', '../to', '..//file.txt', ), 'file.txt'),
             (('stupid/', '/path/', '/with.dots/', '/wazzup?', ), 'stupid/path/with.dots/wazzup?'),
             ((Path('path/'), Path('with spaces '), ' ', Path('yo/'), ), 'path/with spaces / /yo/'),
+            (('/path//', '/to/', '/file.txt', ), '/path/to/file.txt'),
+            (('/path\/', '\/to/', '/file.txt', ), '/path\//\/to/file.txt'),
             )
         for bits, expected in tests:
             t = Path(bits[0]).join(*bits[1:])

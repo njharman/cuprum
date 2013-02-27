@@ -1,2 +1,7 @@
 include LICENSE
+include CHANGELOG
 include README.rst
+include requirements.pip
+include docs
+include tests/*py
+include tests/not-in-path/*

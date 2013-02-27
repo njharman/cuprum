@@ -35,7 +35,7 @@ class LocalMachineTestCase(unittest.TestCase):
         self.assertRaises(OSError, local.cwd.chdir, '../non_exist1N9')
 
     def test_path(self):
-        self.assertFalse((local.cwd / '../non_exist1N9').exists)
+        self.assertFalse((local.cwd / '../non_exist1N9').exists())
         self.assertTrue((local.cwd / '..' / 'cu').isdir)
         # traversal
         found = False
@@ -152,7 +152,7 @@ class LocalMachineTestCase(unittest.TestCase):
                 f.write('hello world')
             with open(str(dir / 'test.txt'), 'r') as f:
                 self.assertEqual(f.read(), 'hello world')
-        self.assertFalse(dir.exists)
+        self.assertFalse(dir.exists())
 
     @unittest.skipIf(sys.version.startswith('2.5'), 'Unsupported for Python 2.5')
     def test_tempfile(self):
@@ -162,4 +162,4 @@ class LocalMachineTestCase(unittest.TestCase):
             fh.write('hello world')
             fh.seek(0)
             self.assertEqual(fh.read(), 'hello world')
-        self.assertFalse(fh.name.exists)
+        self.assertFalse(fh.name.exists())

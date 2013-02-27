@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 import os
-import cu
 
 try:
     from distutils.core import setup
@@ -10,12 +9,11 @@ except ImportError:
 
 setup(
     name='cuprum',
-    packages=['cu', ],
-    version=cu.__version__,
+    version='0.1.0',
     author='Norman J. Harman Jr.',
     author_email='njharman@gmail.com',
     url='https://github.com/njharman/cuprum',
-    description='''Cuprum: Awesome path/file operations and "subprocess for unix daddy's"''',
+    description='''Awesome path/file operations and "subprocess for unix daddy's"''',
     long_description=open(os.path.join(os.path.dirname(__file__), 'README.rst'), 'r').read(),
     license='MIT',
     platforms=['POSIX', 'Windows'],
@@ -33,4 +31,9 @@ setup(
         'Programming Language :: Python :: 3.1',
         'Programming Language :: Python :: 3.2',
         ],
+    install_requires=[
+        'six',
+        ],
+    packages=['cu', ],
+    provides=['cuprum', ],
     )
