@@ -54,14 +54,6 @@ class Path(object):
       - abs:  Absolute version of this path (relative to cwd if necessary)
       - basename: os.path.basename()
       - dirname: like os.path.dirname but respects ``keep_trailing_slash`` value.
-      - exists: os.path.exists()
-      - isabs: os.path.isabs()
-      - isabsolute: alias of isabs
-      - isrelative: not isabs
-      - isdir: os.path.isdir()
-      - isfile: os.path.isfile()
-      - islink: os.path.islink()
-      - ismount: os.path.ismount()
       - sep: os.path.sep
       - unicode: os.path.supports_unicode_filenames
 
@@ -71,10 +63,22 @@ class Path(object):
       - group: get / set group of leaf component
       - mode: get / set permissions of leaf component
 
+   Methods:
+
+      - exists: os.path.exists()
+      - isabs: os.path.isabs()
+      - isabsolute: alias of isabs
+      - isrelative: not isabs
+      - isdir: os.path.isdir()
+      - isempty: os.path.isdir() and has not files
+      - isfile: os.path.isfile()
+      - islink: os.path.islink()
+      - ismount: os.path.ismount()
+
     '''
     sep = os.path.sep
     unicode = os.path.supports_unicode_filenames
-    _str = unicode if os.path.supports_unicode_filenames else str
+    _text = unicode if os.path.supports_unicode_filenames else str
 
     @classmethod
     def common_prefix(cls, paths, *bits):
@@ -172,7 +176,7 @@ class Path(object):
             # put back trailing slash normpath strips, but not if path reduced to '/'
             elif slasher and path != self.sep:
                 path += self.sep
-        self._path = self._str(path)
+        self._path = self._text(path)
         if bits:
             # TODO: kind of lame
             self._path = self.join(*bits)._path
@@ -181,7 +185,7 @@ class Path(object):
         return '<%s(\'%s\')>' % (self.__class__.__name__, self._path)
 
     def __str__(self):
-        return self._path
+        return str(self._path)
 
     def __unicode__(self):
         # Note: Don't be a fascist, maybe user isn't actually doing anything
@@ -216,7 +220,7 @@ class Path(object):
         if isinstance(other, Path):
             other = other._path
         elif not isinstance(other, six.string_types):
-            other = self._str(other)
+            other = self._text(other)
         return os.path.normcase(self._path) == os.path.normcase(other)
 
     def __cmp__(self, other):
@@ -288,7 +292,7 @@ class Path(object):
         :return: text
         '''
         base, ext = os.path.splitext(self.basename)
-        return self._str(ext)
+        return self._text(ext)
 
     @property
     def abs(self):
@@ -368,6 +372,12 @@ class Path(object):
         return os.path.isdir(self._path)
 
     isdir = is_dir
+
+    def is_empty(self):
+        '''True if this path is an empty directory.'''
+        return self.is_dir() and len(self.list()) == 0
+
+    isempty = is_empty
 
     def is_file(self):
         '''True if this path is a regular file.'''
@@ -551,7 +561,7 @@ class Path(object):
             tail = good_bits[1:]
         else:
             return self.__class__('', keep_trailing_slash=self._kts)
-        proper_bits = head + [self._str(b.lstrip(self.sep)) for b in tail]
+        proper_bits = head + [self._text(b.lstrip(self.sep)) for b in tail]
         return self._pathize(os.path.join(*proper_bits))
 
     def join_path(self, *bits):
@@ -597,7 +607,7 @@ class Path(object):
         '''Expand pattern as glob.glob rooted at this path.
         :return: (possibly empty) generator of Path()s matching glob
         '''
-        for path in glob.glob(self._str(self / pattern)):
+        for path in glob.glob(self._text(self / pattern)):
             yield self._pathize(path)
 
     def walk(self, topdown=True, onerror=None, followlinks=False):
@@ -617,7 +627,7 @@ class Path(object):
         for p in self.list():
             if filter(p):
                 yield p
-                if p.isdir:
+                if p.isdir():
                     for p2 in p.walk():
                         yield p2
 
@@ -651,10 +661,10 @@ class Path(object):
             Path(link).delete()
         if symbolic:
             log.info('Symlink to %s' % (self._path, ))
-            os.symlink(self._path, self._str(link))
+            os.symlink(self._path, self._text(link))
         else:
             log.info('Hardlink to %s' % (self._path, ))
-            os.link(self._path, self._str(link))
+            os.link(self._path, self._text(link))
         return self._pathize(link)
 
     def hardlink(self, link, force=False):
@@ -690,8 +700,7 @@ class Path(object):
 
     def copy(self, dest, force=False, symlinks=False):
         '''Copies this path (recursively, if a directory) to the destination.
-        path.
-        unless force=True.
+        :param dest: fullpath including filename
         :param force: [False] existing dest is deleted
         :parm symlinks: [False] passed to shutil.copytree
         :return: new Path(dest)
@@ -699,11 +708,11 @@ class Path(object):
         dest = self._pathize(dest)
         if force:
             dest.delete()
-        log.info('Copy to %s' % (self._path, ))
+        log.info('Copy to %s' % (dest._path, ))
         if self.isdir():
-            shutil.copytree(self._path, dest, symlinks)
+            shutil.copytree(self._path, dest._path, symlinks)
         else:
-            shutil.copy2(self._path, dest)
+            shutil.copy2(self._path, dest._path)
         return dest
 
     def move(self, dest, force=False):
